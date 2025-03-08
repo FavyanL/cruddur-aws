@@ -18,10 +18,10 @@ export default function SigninPage() {
     
     try {
       const user = await signIn({ username: email, password });
-
+      
       console.log("Signed in:", user);
       
-      localStorage.setItem("access_token", user.signInDetails?.loginId || '');
+      localStorage.setItem("access_token", user.signInUserSession.accessToken.jwtToken);
       window.location.href = "/";
 
     } catch (error) {

@@ -1,50 +1,45 @@
 import './SignupPage.css';
-import React from "react";
-import {ReactComponent as Logo} from '../components/svg/logo.svg';
+import React, { useState } from "react";
+import { ReactComponent as Logo } from '../components/svg/logo.svg';
 import { Link } from "react-router-dom";
 
-// [TODO] Authenication
-import Cookies from 'js-cookie'
+// Import correct Amplify Auth function
+import { signUp } from '@aws-amplify/auth';
 
 export default function SignupPage() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState('');
 
-  // Username is Eamil
-  const [name, setName] = React.useState('');
-  const [email, setEmail] = React.useState('');
-  const [username, setUsername] = React.useState('');
-  const [password, setPassword] = React.useState('');
-  const [errors, setErrors] = React.useState('');
-
-  const onsubmit = async (event) => {
+  const handleSignup = async (event) => {
     event.preventDefault();
-    console.log('SignupPage.onsubmit')
-    // [TODO] Authenication
-    Cookies.set('user.name', name)
-    Cookies.set('user.username', username)
-    Cookies.set('user.email', email)
-    Cookies.set('user.password', password)
-    Cookies.set('user.confirmation_code',1234)
-    window.location.href = `/confirm?email=${email}`
-    return false
-  }
+    setErrors('');
 
-  const name_onchange = (event) => {
-    setName(event.target.value);
-  }
-  const email_onchange = (event) => {
-    setEmail(event.target.value);
-  }
-  const username_onchange = (event) => {
-    setUsername(event.target.value);
-  }
-  const password_onchange = (event) => {
-    setPassword(event.target.value);
-  }
+    try {
+      // Call Cognito's signUp function
+      const { user } = await signUp({
+        username: email, // Cognito requires a username (using email for simplicity)
+        password,
+        attributes: {
+          email,  // Required attribute
+          name,   // Optional - stores user’s real name
+          preferred_username: username, // Optional
+        },
+        autoSignIn: { enabled: true }, // Auto sign-in after confirmation
+      });
 
-  let el_errors;
-  if (errors){
-    el_errors = <div className='errors'>{errors}</div>;
-  }
+      console.log("User signed up:", user);
+
+      // Redirect to confirmation page
+      window.location.href = `/confirm?email=${email}`;
+
+    } catch (error) {
+      console.error("Error signing up:", error);
+      setErrors(error.message);
+    }
+  };
 
   return (
     <article className='signup-article'>
@@ -52,10 +47,7 @@ export default function SignupPage() {
         <Logo className='logo' />
       </div>
       <div className='signup-wrapper'>
-        <form 
-          className='signup_form'
-          onSubmit={onsubmit}
-        >
+        <form className='signup_form' onSubmit={handleSignup}>
           <h2>Sign up to create a Cruddur account</h2>
           <div className='fields'>
             <div className='field text_field name'>
@@ -63,16 +55,18 @@ export default function SignupPage() {
               <input
                 type="text"
                 value={name}
-                onChange={name_onchange} 
+                onChange={(e) => setName(e.target.value)}
+                required
               />
             </div>
 
             <div className='field text_field email'>
               <label>Email</label>
               <input
-                type="text"
+                type="email"
                 value={email}
-                onChange={email_onchange} 
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
 
@@ -81,7 +75,8 @@ export default function SignupPage() {
               <input
                 type="text"
                 value={username}
-                onChange={username_onchange} 
+                onChange={(e) => setUsername(e.target.value)}
+                required
               />
             </div>
 
@@ -90,19 +85,18 @@ export default function SignupPage() {
               <input
                 type="password"
                 value={password}
-                onChange={password_onchange} 
+                onChange={(e) => setPassword(e.target.value)}
+                required
               />
             </div>
           </div>
-          {el_errors}
+          {errors && <div className='errors'>{errors}</div>}
           <div className='submit'>
             <button type='submit'>Sign Up</button>
           </div>
         </form>
         <div className="already-have-an-account">
-          <span>
-            Already have an account?
-          </span>
+          <span>Already have an account?</span>
           <Link to="/signin">Sign in!</Link>
         </div>
       </div>
