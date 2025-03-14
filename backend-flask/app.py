@@ -2,6 +2,7 @@ from flask import Flask, request
 from flask_cors import CORS, cross_origin
 import os
 import logging 
+import sys
 
 from services.home_activities import *
 from services.notifications_activities import *
@@ -118,8 +119,17 @@ origins = [frontend, backend]
 cors = CORS(
     app, 
     resources={r"/api/*": {"origins": origins}},
-    expose_headers="location,link",
-    allow_headers="content-type,if-modified-since",
+    supports_credentials=True,  # Allow credentials like Authorization tokens
+    allow_headers=[
+        "Content-Type",
+        "Authorization",  # ✅ Explicitly allow Authorization header
+        "If-Modified-Since"
+    ],
+    expose_headers=[
+        "Authorization",
+        "Location",
+        "Link"
+    ],
     methods="OPTIONS,GET,HEAD,POST"
 )
 
@@ -173,6 +183,9 @@ def data_create_message():
 
 @app.route("/api/activities/home", methods=['GET'])
 def data_home():
+    print(
+      request.headers.get('Authorization')
+    )
     data = HomeActivities.run(Logger=LOGGER)
     return data, 200
 

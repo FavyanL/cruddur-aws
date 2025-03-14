@@ -4,33 +4,33 @@ import { ReactComponent as Logo } from '../components/svg/logo.svg';
 import { Link, useNavigate } from "react-router-dom";
 import { signIn } from '@aws-amplify/auth';
 
-export default function SigninPage({ refreshUser }) { // ✅ Accept refreshUser function from App.js
+export default function SigninPage({ refreshUser }) { // Accept refreshUser function from App.js
   const navigate = useNavigate(); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState('');
 
   const onsubmit = async (event) => {
-    event.preventDefault(); // ✅ Prevent form submission from reloading the page
+    event.preventDefault(); // Prevent form submission from reloading the page
     setErrors('');
     
     try {
       const user = await signIn({ username: email, password });
       
-      console.log("✅ Signed in:", user);
+      console.log("Signed in:", user);
       
-      // ✅ Store session token properly for future API requests
+      // Store session token properly for future API requests
       if (user.signInUserSession) {
         localStorage.setItem("access_token", user.signInUserSession.accessToken.jwtToken);
       }
 
-      refreshUser(); // ✅ Update the user state immediately
-      navigate("/"); // ✅ Redirect user to homepage
+      refreshUser(); // Update the user state immediately
+      navigate("/"); // Redirect user to homepage
 
     } catch (error) {
       console.error("❌ Error signing in:", error);
 
-      // ✅ Handle unconfirmed users by redirecting to confirmation page
+      // andle unconfirmed users by redirecting to confirmation page
       if (error.name === 'UserNotConfirmedException') {
         navigate("/confirm");
       }
