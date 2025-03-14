@@ -20,7 +20,7 @@ export default function SignupPage() {
       const generatedUsername = `user_${Date.now()}`;
 
       const { user } = await signUp({
-        username: generatedUsername,  // ✅ Non-email username
+        username: email,  // ✅ Non-email username
         password,
         attributes: {
           email: email,  // ✅ Required
