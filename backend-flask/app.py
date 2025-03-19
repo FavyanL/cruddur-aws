@@ -15,7 +15,7 @@ from services.messages import *
 from services.create_message import *
 from services.show_activity import *
 
-from lib.cognito_token_verification import CognitoTokenVerification
+from lib.cognito_jwt_token import CognitoJwtToken, extract_access_token, TokenVerifyError
 
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -54,7 +54,7 @@ LOGGER.info("test log")
 # Initialize Flask app
 app = Flask(__name__)
 
-cognito_token_verification = CognitoTokenVerification(
+cognito_jwt_token = CognitoJwtToken(
     user_pool_id= os.getenv("AWS_COGNITO_USER_POOL_ID"), 
     user_pool_client_id= os.getenv("AWS_COGNITO_USER_POOL_CLIENT_ID"), 
     region= os.getenv("AWS_DEFAULT_REGION")
@@ -194,7 +194,16 @@ def data_home():
     print(
       request.headers.get('Authorization')
     )
+    access_token = extract_access_token(request.headers)
+    try:
+        claims = cognito_jwt_token.verify(access_token)
+        app.logger.debug('authenticated')
+        app.logger.debug(claims)
+    except TokenVerifyError as e:
+        app.logger.debug("unathenticated")
+
     data = HomeActivities.run(Logger=LOGGER)
+    
     return data, 200
 
 @app.route("/api/activities/notifications", methods=['GET'])
