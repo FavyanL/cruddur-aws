@@ -191,9 +191,9 @@ def data_create_message():
 
 @app.route("/api/activities/home", methods=['GET'])
 def data_home():
-    print(
-      request.headers.get('Authorization')
-    )
+    print(f"🔍 Request Headers: {request.headers}")  # Debugging
+    access_token = extract_access_token(request.headers)
+    print(f"🔑 Extracted Token: {access_token}")  # Log the extracted token 
     access_token = extract_access_token(request.headers)
     try:
         claims = cognito_jwt_token.verify(access_token)
