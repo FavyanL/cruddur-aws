@@ -2,7 +2,7 @@ import './ProfileInfo.css';
 import {ReactComponent as ElipsesIcon} from './svg/elipses.svg';
 import React from "react";
 
-// ✅ Correct Authentication Import
+// Correct Authentication Import
 import { signOut as amplifySignOut } from '@aws-amplify/auth';
 
 export default function ProfileInfo(props) {
