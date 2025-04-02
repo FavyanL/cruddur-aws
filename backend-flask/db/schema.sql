@@ -1,30 +1,28 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+DROP TABLE IF EXISTS public.users;
+
+DROP TABLE IF EXISTS public.activities;
+
 CREATE TABLE public.users (
-    uuid UUID DEFAULT uuid_generate-v4() PRIMARY KEY,
+    uuid UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     display_name text,
-    handle text
+    handle text,
     cognito_user_id text, 
     created_at TIMESTAMP default current_timestamp NOT NULL 
 );
 
 CREATE TABLE public.activities (
     uuid UUID DEFAULT uuid_generate_v4() PRIMARY KEY, 
+    user_uuid UUID NOT NULL,
     message text NOT NULL, 
     replies_count integer DEFAULT 0,
     repost_count integer DEFAULT 0,
     likes_count integer DEFAULT 0, 
     reply_to_activity_uuid integer,
-    expires_at TIMESTAMP
+    expires_at TIMESTAMP,
     created_at TIMESTAMP default current_timestamp NOT NULL
 )
 
-DROP TABLE IF EXISTS public.users;
-DROP TABLE IF EXISTS public.activities;
 
-export CONNECTION_URL="postgresql://postgres:password@localhost:5432/cruddur"
-gp en CONNECTION_URL="postgresql://postgres:password@localhost:5432/cruddur"
-
-export PROD_CONNECTION_URL="postgresql://cruddurroot:goodDatabasePassword1@cruddur-db-instance.czugegm8acwr.us-east-1.rds.amazonaws.com:5432/cruddur"
-gp env PROD_CONNECTION_URL="postgresql://cruddurroot:goodDatabasePassword1@cruddur-db-instance.czugegm8acwr.us-east-1.rds.amazonaws.com:5432/cruddur"
 
