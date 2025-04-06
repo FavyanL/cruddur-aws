@@ -66,7 +66,7 @@ export default function SigninPage({ refreshUser }) { // Accept refreshUser func
             </div>
           </div>
 
-          {/* ✅ Show errors if authentication fails */}
+          {/* Show errors if authentication fails */}
           {errors && <div className='errors'>{errors}</div>}
 
           <div className='submit'>

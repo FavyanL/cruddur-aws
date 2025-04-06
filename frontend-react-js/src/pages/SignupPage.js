@@ -16,21 +16,21 @@ export default function SignupPage() {
     setErrors('');
 
     try {
-      // ✅ Generate a unique username (Cognito requires a username)
+      // Generate a unique username (Cognito requires a username)
       const generatedUsername = `user_${Date.now()}`;
 
       const { user } = await signUp({
-        username: email,  // ✅ Non-email username
+        username: generatedUsername,  // Non-email username
         password,
         attributes: {
-          email: email,  // ✅ Required
+          email: email,  // Required
           name: name,    // Optional
           emails: [email]
         },
       });
 
-      console.log("✅ User signed up:", user);
-      navigate(`/confirm?email=${email}`);  // ✅ Redirect to confirmation page
+      console.log("User signed up:", user);
+      navigate(`/confirm?email=${email}`);  // Redirect to confirmation page
 
     } catch (error) {
       console.error("❌ Error signing up:", error);
