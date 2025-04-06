@@ -6,7 +6,7 @@ import { signUp } from '@aws-amplify/auth';
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const [name, setName] = useState('');
+  const [username, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState('');
@@ -25,8 +25,8 @@ export default function SignupPage() {
         attributes: {
           email: email,  // Required
           name: name,    // Optional
-          emails: [email]
-        },
+          'custom:emails': email 
+         },
       });
 
       console.log("User signed up:", user);
@@ -48,8 +48,8 @@ export default function SignupPage() {
           <h2>Sign up to create a Cruddur account</h2>
           <div className='fields'>
             <div className='field text_field name'>
-              <label>Name</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+              <label>UserName</label>
+              <input type="text" value={username} onChange={(e) => setName(e.target.value)} required />
             </div>
 
             <div className='field text_field email'>
