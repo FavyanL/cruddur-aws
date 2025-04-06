@@ -6,7 +6,8 @@ import { signUp } from '@aws-amplify/auth';
 
 export default function SignupPage() {
   const navigate = useNavigate();
-  const [username, setName] = useState('');
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState('');
