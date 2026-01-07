@@ -1,3 +1,5 @@
+image: gitpod/workspace-full
+
 tasks:
   - name: aws-cli
     env:
