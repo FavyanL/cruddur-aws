@@ -3,14 +3,14 @@ services:
     environment:
       #CONNECTION_URL: "${PROD_CONNECTION_URL}"
       CONNECTION_URL: "postgresql://postgres:password@db:5432/cruddur"
-      FRONTEND_URL: "https://3000-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}"
-      BACKEND_URL: "https://4567-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}"
+      FRONTEND_URL: "http://localhost:3000"
+      BACKEND_URL: "http://localhost:4567"
       HONEYCOMB_API_KEY: "8PGvHyKZhUGUuuJRyFeefC"
       HONEYCOMB_DATASET: "test-dataset"
       OTEL_SERVICE_NAME: "backend-flask"
       OTEL_EXPORTER_OTLP_ENDPOINT: "https://api.honeycomb.io:443/v1/traces"
       OTEL_EXPORTER_OTLP_HEADERS: "x-honeycomb-team=hcaik_01jjhk4hywsfp4qaengzbzd5rf"
-      AWS_XRAY_URL: "*4567-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}*"
+      AWS_XRAY_URL: "*localhost:4567*"
       AWS_XRAY_DAEMON_ADDRESS: "xray-daemon:2000"  # Use service name, not static IP
       AWS_REGION: "us-east-1"
       AWS_DEFAULT_REGION: "us-east-1"
@@ -31,7 +31,7 @@ services:
 
   frontend-react-js:
     environment:
-      REACT_APP_BACKEND_URL: "https://4567-${GITPOD_WORKSPACE_ID}.${GITPOD_WORKSPACE_CLUSTER_HOST}"
+      REACT_APP_BACKEND_URL: "http://localhost:4567"
       REACT_APP_AWS_PROJECT_REGION: "us-east-1"
       REACT_APP_AWS_COGNITO_REGION: "us-east-1"
       REACT_APP_AWS_COGNITO_USER_POOLS_ID: "us-east-1_a6z9SVLi9"

@@ -42,14 +42,17 @@ import rollbar
 import rollbar.contrib.flask
 from flask import got_request_exception
 
-#configure logger to use CloudWatch 
+#configure logger to use CloudWatch (gracefully skip if no AWS credentials)
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.DEBUG)
 console_handler = logging.StreamHandler()
-cw_handler = watchtower.CloudWatchLogHandler(log_group='cruddur')
 LOGGER.addHandler(console_handler)
-LOGGER.addHandler(cw_handler)
-LOGGER.info("test log")
+try:
+    cw_handler = watchtower.CloudWatchLogHandler(log_group='cruddur')
+    LOGGER.addHandler(cw_handler)
+    LOGGER.info("test log")
+except Exception as e:
+    LOGGER.warning(f"CloudWatch logging disabled (no AWS credentials): {e}")
 
 # Initialize Flask app
 app = Flask(__name__)
