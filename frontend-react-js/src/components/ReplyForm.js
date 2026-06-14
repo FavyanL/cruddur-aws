@@ -37,6 +37,9 @@ export default function ReplyForm(props) {
         let found_activity = activities_deep_copy.find(function (element) {
           return element.uuid ===  props.activity.uuid;
         });
+        if (!found_activity.replies) {
+          found_activity.replies = []
+        }
         found_activity.replies.push(data)
 
         props.setActivities(activities_deep_copy);
