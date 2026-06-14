@@ -67,15 +67,19 @@ export default function MessageGroupPage() {
     }
   };
 
+  // Load the conversation list and current user once, on first mount.
   React.useEffect(()=>{
-    //prevents double call
     if (dataFetchedRef.current) return;
     dataFetchedRef.current = true;
-
     loadMessageGroupsData();
-    loadMessageGroupData();
     checkAuth();
   }, [])
+
+  // Reload the messages whenever the URL handle changes (e.g. when you click
+  // between conversations). Without this, the page silently shows stale data.
+  React.useEffect(()=>{
+    loadMessageGroupData();
+  }, [params.handle])
   return (
     <article>
       <DesktopNavigation user={user} active={'home'} setPopped={setPopped} />

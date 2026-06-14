@@ -18,6 +18,9 @@ export default function ActivityForm(props) {
     event.preventDefault();
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/messages`
+      // URL may give us "@hugol" or "hugol" — strip the leading "@" before sending.
+      const rawHandle = params.handle;
+      const cleanHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
       console.log('onsubmit payload', message)
       const res = await fetch(backend_url, {
         method: "POST",
@@ -27,12 +30,15 @@ export default function ActivityForm(props) {
         },
         body: JSON.stringify({
           message: message,
-          user_receiver_handle: params.handle
+          user_receiver_handle: cleanHandle
         }),
       });
       let data = await res.json();
       if (res.status === 200) {
         props.setMessages(current => [...current,data]);
+        // Reset the form after a successful send.
+        setMessage('');
+        setCount(0);
       } else {
         console.log(res)
       }
@@ -45,6 +51,12 @@ export default function ActivityForm(props) {
     setCount(event.target.value.length);
     setMessage(event.target.value);
   }
+
+  // Clear the form whenever we switch to a different conversation.
+  React.useEffect(() => {
+    setMessage('');
+    setCount(0);
+  }, [params.handle]);
 
   return (
     <form 

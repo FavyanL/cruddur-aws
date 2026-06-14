@@ -171,7 +171,7 @@ def data_message_groups():
 @app.route("/api/messages/@<string:handle>", methods=['GET'])
 def data_messages(handle):
     user_sender_handle = 'andrewbrown'
-    user_receiver_handle = request.args.get('user_receiver_handle')
+    user_receiver_handle = handle
     model = Messages.run(user_sender_handle=user_sender_handle, user_receiver_handle=user_receiver_handle)
     if model['errors']:
         return model['errors'], 422
