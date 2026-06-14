@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta, timezone
+from lib.db import pool, query_wrap_array
+
 class Messages:
   def run(user_sender_handle, user_receiver_handle):
     model = {
@@ -6,22 +7,36 @@ class Messages:
       'data': None
     }
 
-    now = datetime.now(timezone.utc).astimezone()
+    if user_sender_handle == None or len(user_sender_handle) < 1:
+      model['errors'] = ['user_sender_handle_blank']
+    if user_receiver_handle == None or len(user_receiver_handle) < 1:
+      model['errors'] = ['user_receiver_handle_blank']
 
-    results = [
-      {
-        'uuid': '4e81c06a-db0f-4281-b4cc-98208537772a' ,
-        'display_name': 'Andrew Brown',
-        'handle':  'andrewbrown',
-        'message': 'Cloud is fun!',
-        'created_at': now.isoformat()
-      },
-      {
-        'uuid': '66e12864-8c26-4c3a-9658-95a10f8fea67',
-        'display_name': 'Andrew Brown',
-        'handle':  'andrewbrown',
-        'message': 'This platform is great!',
-        'created_at': now.isoformat()
-    }]
-    model['data'] = results
+    if model['errors']:
+      return model
+
+    # All messages between sender and receiver (in either direction), oldest first.
+    sql = query_wrap_array("""
+      SELECT
+        messages.uuid,
+        sender.display_name,
+        sender.handle,
+        messages.message,
+        messages.created_at
+      FROM public.messages
+      INNER JOIN public.users sender ON sender.uuid = messages.user_sender_uuid
+      INNER JOIN public.users me    ON me.handle    = %(sender_handle)s
+      INNER JOIN public.users other ON other.handle = %(receiver_handle)s
+      WHERE (messages.user_sender_uuid = me.uuid    AND messages.user_receiver_uuid = other.uuid)
+         OR (messages.user_sender_uuid = other.uuid AND messages.user_receiver_uuid = me.uuid)
+      ORDER BY messages.created_at ASC
+    """)
+    with pool.connection() as conn:
+      with conn.cursor() as cur:
+        cur.execute(sql, {
+          'sender_handle': user_sender_handle,
+          'receiver_handle': user_receiver_handle,
+        })
+        row = cur.fetchone()
+        model['data'] = row[0] if row and row[0] else []
     return model

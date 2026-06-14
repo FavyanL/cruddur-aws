@@ -37,7 +37,10 @@ export default function MessageGroupPage() {
 
   const loadMessageGroupData = async () => {
     try {
-      const handle = `@${params.handle}`;
+      // URL may arrive with or without a leading "@" — normalize to exactly one.
+      const rawHandle = params.handle;
+      const cleanHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
+      const handle = `@${cleanHandle}`;
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/messages/${handle}`
       const res = await fetch(backend_url, {
         method: "GET"

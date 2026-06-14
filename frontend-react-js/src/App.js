@@ -50,7 +50,7 @@ function App() {
         <Route path="/notifications" element={<NotificationsFeedPage />} />
         <Route path="/:handle" element={<UserFeedPage />} />
         <Route path="/messages" element={<MessageGroupsPage />} />
-        <Route path="/messages/@:handle" element={<MessageGroupPage />} />
+        <Route path="/messages/:handle" element={<MessageGroupPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signin" element={<SigninPage refreshUser={fetchUser} />} />
         <Route path="/confirm" element={<ConfirmationPage />} />
