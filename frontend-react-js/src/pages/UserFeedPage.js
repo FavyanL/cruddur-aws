@@ -17,7 +17,10 @@ export default function UserFeedPage() {
   const dataFetchedRef = React.useRef(false);
 
   const params = useParams();
-  const title = `@${params.handle}`;
+  // The URL may arrive with or without a leading "@" — normalize it,
+  // then build the display/back-end title with exactly one "@".
+  const cleanHandle = params.handle.startsWith('@') ? params.handle.slice(1) : params.handle;
+  const title = `@${cleanHandle}`;
 
   const loadData = async () => {
     try {

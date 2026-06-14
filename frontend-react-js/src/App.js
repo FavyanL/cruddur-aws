@@ -48,7 +48,7 @@ function App() {
         {/* ✅ Pass fetchUser function to re-fetch user after login */}
         <Route path="/" element={user ? <HomeFeedPage /> : <SigninPage refreshUser={fetchUser} />} />
         <Route path="/notifications" element={<NotificationsFeedPage />} />
-        <Route path="/@:handle" element={<UserFeedPage />} />
+        <Route path="/:handle" element={<UserFeedPage />} />
         <Route path="/messages" element={<MessageGroupsPage />} />
         <Route path="/messages/@:handle" element={<MessageGroupPage />} />
         <Route path="/signup" element={<SignupPage />} />
