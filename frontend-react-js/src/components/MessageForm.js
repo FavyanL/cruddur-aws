@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom';
 export default function ActivityForm(props) {
   const [count, setCount] = React.useState(0);
   const [message, setMessage] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
   const params = useParams();
 
   const classes = []
@@ -16,6 +17,8 @@ export default function ActivityForm(props) {
 
   const onsubmit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/messages`
       // URL may give us "@hugol" or "hugol" — strip the leading "@" before sending.
@@ -44,6 +47,8 @@ export default function ActivityForm(props) {
       }
     } catch (err) {
       console.log(err);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -71,7 +76,9 @@ export default function ActivityForm(props) {
       />
       <div className='submit'>
         <div className={classes.join(' ')}>{1024-count}</div>
-        <button type='submit'>Message</button>
+        <button type='submit' disabled={submitting}>
+          {submitting ? 'Sending…' : 'Message'}
+        </button>
       </div>
     </form>
   );

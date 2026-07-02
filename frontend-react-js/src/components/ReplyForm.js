@@ -8,6 +8,7 @@ import ActivityContent  from '../components/ActivityContent';
 export default function ReplyForm(props) {
   const [count, setCount] = React.useState(0);
   const [message, setMessage] = React.useState('');
+  const [submitting, setSubmitting] = React.useState(false);
 
   const classes = []
   classes.push('count')
@@ -17,6 +18,8 @@ export default function ReplyForm(props) {
 
   const onsubmit = async (event) => {
     event.preventDefault();
+    if (submitting) return;   // ignore extra clicks while a submit is in flight
+    setSubmitting(true);
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/activities/${props.activity.uuid}/reply`
       const res = await fetch(backend_url, {
@@ -52,6 +55,8 @@ export default function ReplyForm(props) {
       }
     } catch (err) {
       console.log(err);
+    } finally {
+      setSubmitting(false);   // always re-enable the button, whether we succeeded, failed, or errored
     }
   }
 
@@ -88,7 +93,9 @@ export default function ReplyForm(props) {
               />
               <div className='submit'>
                 <div className={classes.join(' ')}>{240-count}</div>
-                <button type='submit'>Reply</button>
+                <button type='submit' disabled={submitting}>
+                  {submitting ? 'Posting…' : 'Reply'}
+                </button>
               </div>
             </form>
           </div>

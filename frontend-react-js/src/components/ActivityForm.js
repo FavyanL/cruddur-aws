@@ -7,6 +7,7 @@ export default function ActivityForm(props) {
   const [count, setCount] = React.useState(0);
   const [message, setMessage] = React.useState('');
   const [ttl, setTtl] = React.useState('7-days');
+  const [submitting, setSubmitting] = React.useState(false);
 
   const classes = []
   classes.push('count')
@@ -16,6 +17,8 @@ export default function ActivityForm(props) {
 
   const onsubmit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/activities`
       console.log('onsubmit payload', message)
@@ -44,6 +47,8 @@ export default function ActivityForm(props) {
       }
     } catch (err) {
       console.log(err);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -70,7 +75,9 @@ export default function ActivityForm(props) {
         />
         <div className='submit'>
           <div className={classes.join(' ')}>{240-count}</div>
-          <button type='submit'>Crud</button>
+          <button type='submit' disabled={submitting}>
+            {submitting ? 'Posting…' : 'Crud'}
+          </button>
           <div className='expires_at_field'>
             <BombIcon className='icon' />
             <select
