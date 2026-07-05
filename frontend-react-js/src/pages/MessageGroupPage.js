@@ -22,7 +22,10 @@ export default function MessageGroupPage() {
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/message_groups`
       const res = await fetch(backend_url, {
-        method: "GET"
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+        }
       });
       let resJson = await res.json();
       if (res.status === 200) {
@@ -43,7 +46,10 @@ export default function MessageGroupPage() {
       const handle = `@${cleanHandle}`;
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/messages/${handle}`
       const res = await fetch(backend_url, {
-        method: "GET"
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+        }
       });
       let resJson = await res.json();
       if (res.status === 200) {

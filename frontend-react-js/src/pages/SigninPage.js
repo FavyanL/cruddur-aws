@@ -2,7 +2,7 @@ import './SigninPage.css';
 import React, { useState } from "react";
 import { ReactComponent as Logo } from '../components/svg/logo.svg';
 import { Link, useNavigate } from "react-router-dom";
-import { signIn } from '@aws-amplify/auth';
+import { signIn, fetchAuthSession } from '@aws-amplify/auth';
 
 export default function SigninPage({ refreshUser }) { // Accept refreshUser function from App.js
   const navigate = useNavigate(); 
@@ -15,13 +15,14 @@ export default function SigninPage({ refreshUser }) { // Accept refreshUser func
     setErrors('');
     
     try {
-      const user = await signIn({ username: email, password });
-      
-      console.log("Signed in:", user);
-      
-      // Store session token properly for future API requests
-      if (user.signInUserSession) {
-        localStorage.setItem("access_token", user.signInUserSession.accessToken.jwtToken);
+      const { isSignedIn } = await signIn({ username: email, password });
+
+      console.log("Signed in:", isSignedIn);
+
+      // Amplify v6: tokens come from fetchAuthSession(), not the signIn result
+      if (isSignedIn) {
+        const session = await fetchAuthSession();
+        localStorage.setItem("access_token", session.tokens.accessToken.toString());
       }
 
       refreshUser(); // Update the user state immediately
