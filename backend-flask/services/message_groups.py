@@ -1,13 +1,13 @@
 from lib.db import pool, query_wrap_array
 
 class MessageGroups:
-  def run(user_handle):
+  def run(cognito_user_id):
     model = {
       'errors': None,
       'data': None
     }
 
-    if user_handle == None or len(user_handle) < 1:
+    if cognito_user_id == None or len(cognito_user_id) < 1:
       model['errors'] = ['user_handle_blank']
       return model
 
@@ -20,7 +20,7 @@ class MessageGroups:
         other_user.handle,
         MAX(messages.created_at) AS created_at
       FROM public.messages
-      INNER JOIN public.users me ON me.handle = %(handle)s
+      INNER JOIN public.users me ON me.cognito_user_id = %(cognito_user_id)s
       INNER JOIN public.users other_user
         ON (other_user.uuid = messages.user_sender_uuid AND messages.user_receiver_uuid = me.uuid)
         OR (other_user.uuid = messages.user_receiver_uuid AND messages.user_sender_uuid = me.uuid)
@@ -30,7 +30,7 @@ class MessageGroups:
     """)
     with pool.connection() as conn:
       with conn.cursor() as cur:
-        cur.execute(sql, {'handle': user_handle})
+        cur.execute(sql, {'cognito_user_id': cognito_user_id})
         row = cur.fetchone()
         model['data'] = row[0] if row and row[0] else []
     return model

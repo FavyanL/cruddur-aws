@@ -144,6 +144,16 @@ cors = CORS(
     methods="OPTIONS,GET,HEAD,POST"
 )
 
+# Returns the Cognito user id ('sub' claim) from a verified JWT,
+# or None if the request has no token / an invalid or expired token.
+def get_cognito_user_id():
+    access_token = extract_access_token(request.headers)
+    try:
+        claims = cognito_jwt_token.verify(access_token)
+        return claims['sub']
+    except TokenVerifyError:
+        return None
+
 @app.after_request
 def after_request(response):
     timestamp =strftime('[%Y-%b-%d %H:%M]')
@@ -162,17 +172,21 @@ def home():
 
 @app.route("/api/message_groups", methods=['GET'])
 def data_message_groups():
-    user_handle = 'favyan'
-    model = MessageGroups.run(user_handle=user_handle)
+    cognito_user_id = get_cognito_user_id()
+    if cognito_user_id is None:
+        return {'errors': ['unauthenticated']}, 401
+    model = MessageGroups.run(cognito_user_id=cognito_user_id)
     if model['errors']:
         return model['errors'], 422
     return model['data'], 200
 
 @app.route("/api/messages/@<string:handle>", methods=['GET'])
 def data_messages(handle):
-    user_sender_handle = 'favyan'
+    cognito_user_id = get_cognito_user_id()
+    if cognito_user_id is None:
+        return {'errors': ['unauthenticated']}, 401
     user_receiver_handle = handle
-    model = Messages.run(user_sender_handle=user_sender_handle, user_receiver_handle=user_receiver_handle)
+    model = Messages.run(cognito_user_id=cognito_user_id, user_receiver_handle=user_receiver_handle)
     if model['errors']:
         return model['errors'], 422
     return model['data'], 200
@@ -180,12 +194,14 @@ def data_messages(handle):
 @app.route("/api/messages", methods=['POST', 'OPTIONS'])
 @cross_origin()
 def data_create_message():
-    user_sender_handle = 'favyan'
+    cognito_user_id = get_cognito_user_id()
+    if cognito_user_id is None:
+        return {'errors': ['unauthenticated']}, 401
     user_receiver_handle = request.json['user_receiver_handle']
     message = request.json['message']
     model = CreateMessage.run(
-        message=message, 
-        user_sender_handle=user_sender_handle, 
+        message=message,
+        cognito_user_id=cognito_user_id,
         user_receiver_handle=user_receiver_handle
     )
     if model['errors']:
@@ -232,10 +248,12 @@ def data_search():
 @app.route("/api/activities", methods=['POST', 'OPTIONS'])
 @cross_origin()
 def data_activities():
-    user_handle = 'favyan'
+    cognito_user_id = get_cognito_user_id()
+    if cognito_user_id is None:
+        return {'errors': ['unauthenticated']}, 401
     message = request.json['message']
     ttl = request.json['ttl']
-    model = CreateActivity.run(message, user_handle, ttl)
+    model = CreateActivity.run(message, cognito_user_id, ttl)
     if model['errors']:
         return model['errors'], 422
     return model['data'], 200
@@ -248,9 +266,11 @@ def data_show_activity(activity_uuid):
 @app.route("/api/activities/<string:activity_uuid>/reply", methods=['POST', 'OPTIONS'])
 @cross_origin()
 def data_activities_reply(activity_uuid):
-    user_handle = 'favyan'
+    cognito_user_id = get_cognito_user_id()
+    if cognito_user_id is None:
+        return {'errors': ['unauthenticated']}, 401
     message = request.json['message']
-    model = CreateReply.run(message, user_handle, activity_uuid)
+    model = CreateReply.run(message, cognito_user_id, activity_uuid)
     if model['errors']:
         return model['errors'], 422
     return model['data'], 200

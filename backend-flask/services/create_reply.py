@@ -1,14 +1,14 @@
 from lib.db import pool
 
 class CreateReply:
-  def run(message, user_handle, activity_uuid):
+  def run(message, cognito_user_id, activity_uuid):
     model = {
       'errors': None,
       'data': None
     }
 
-    if user_handle == None or len(user_handle) < 1:
-      model['errors'] = ['user_handle_blank']
+    if cognito_user_id == None or len(cognito_user_id) < 1:
+      model['errors'] = ['cognito_user_id_blank']
 
     if activity_uuid == None or len(activity_uuid) < 1:
       model['errors'] = ['activity_uuid_blank']
@@ -21,18 +21,17 @@ class CreateReply:
     if model['errors']:
       # return what we provided (without hitting the database)
       model['data'] = {
-        'handle': user_handle,
         'message': message,
         'reply_to_activity_uuid': activity_uuid
       }
     else:
-      reply_uuid = CreateReply.create_reply(user_handle, message, activity_uuid)
+      reply_uuid = CreateReply.create_reply(cognito_user_id, message, activity_uuid)
       model['data'] = CreateReply.query_reply(reply_uuid)
     return model
 
   # Insert a reply: a new activity that points at the original via reply_to_activity_uuid.
   # Returns the new reply's UUID.
-  def create_reply(handle, message, reply_to_activity_uuid):
+  def create_reply(cognito_user_id, message, reply_to_activity_uuid):
     sql = """
       INSERT INTO public.activities (
         user_uuid,
@@ -40,7 +39,7 @@ class CreateReply:
         reply_to_activity_uuid
       )
       VALUES (
-        (SELECT uuid FROM public.users WHERE users.handle = %(handle)s LIMIT 1),
+        (SELECT uuid FROM public.users WHERE users.cognito_user_id = %(cognito_user_id)s LIMIT 1),
         %(message)s,
         %(reply_to_activity_uuid)s
       )
@@ -49,7 +48,7 @@ class CreateReply:
     with pool.connection() as conn:
       with conn.cursor() as cur:
         cur.execute(sql, {
-          'handle': handle,
+          'cognito_user_id': cognito_user_id,
           'message': message,
           'reply_to_activity_uuid': reply_to_activity_uuid,
         })

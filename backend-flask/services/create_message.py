@@ -1,13 +1,13 @@
 from lib.db import pool
 
 class CreateMessage:
-  def run(message, user_sender_handle, user_receiver_handle):
+  def run(message, cognito_user_id, user_receiver_handle):
     model = {
       'errors': None,
       'data': None
     }
-    if user_sender_handle == None or len(user_sender_handle) < 1:
-      model['errors'] = ['user_sender_handle_blank']
+    if cognito_user_id == None or len(cognito_user_id) < 1:
+      model['errors'] = ['cognito_user_id_blank']
 
     if user_receiver_handle == None or len(user_receiver_handle) < 1:
       model['errors'] = ['user_receiver_handle_blank']
@@ -20,12 +20,11 @@ class CreateMessage:
     if model['errors']:
       # return what we provided
       model['data'] = {
-        'handle':  user_sender_handle,
         'message': message
       }
     else:
       message_uuid = CreateMessage.create_message(
-        sender_handle=user_sender_handle,
+        cognito_user_id=cognito_user_id,
         receiver_handle=user_receiver_handle,
         message=message,
       )
@@ -33,7 +32,7 @@ class CreateMessage:
     return model
 
   # Insert a new message and return its UUID.
-  def create_message(sender_handle, receiver_handle, message):
+  def create_message(cognito_user_id, receiver_handle, message):
     sql = """
       INSERT INTO public.messages (
         user_sender_uuid,
@@ -41,7 +40,7 @@ class CreateMessage:
         message
       )
       VALUES (
-        (SELECT uuid FROM public.users WHERE users.handle = %(sender)s LIMIT 1),
+        (SELECT uuid FROM public.users WHERE users.cognito_user_id = %(sender)s LIMIT 1),
         (SELECT uuid FROM public.users WHERE users.handle = %(receiver)s LIMIT 1),
         %(message)s
       )
@@ -50,7 +49,7 @@ class CreateMessage:
     with pool.connection() as conn:
       with conn.cursor() as cur:
         cur.execute(sql, {
-          'sender': sender_handle,
+          'sender': cognito_user_id,
           'receiver': receiver_handle,
           'message': message,
         })

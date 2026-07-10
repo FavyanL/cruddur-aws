@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from lib.db import pool
 
 class CreateActivity:
-  def run(message, user_handle, ttl):
+  def run(message, cognito_user_id, ttl):
     model = {
       'errors': None,
       'data': None
@@ -27,8 +27,8 @@ class CreateActivity:
     else:
       model['errors'] = ['ttl_blank']
 
-    if user_handle == None or len(user_handle) < 1:
-      model['errors'] = ['user_handle_blank']
+    if cognito_user_id == None or len(cognito_user_id) < 1:
+      model['errors'] = ['cognito_user_id_blank']
 
     if message == None or len(message) < 1:
       model['errors'] = ['message_blank']
@@ -37,18 +37,17 @@ class CreateActivity:
 
     if model['errors']:
       model['data'] = {
-        'handle':  user_handle,
         'message': message
       }
     else:
       expires_at = now + ttl_offset
-      activity_uuid = CreateActivity.create_activity(user_handle, message, expires_at)
+      activity_uuid = CreateActivity.create_activity(cognito_user_id, message, expires_at)
       model['data'] = CreateActivity.query_activity(activity_uuid)
     return model
 
-  # Insert a new activity row, linked to the user matching the given handle.
+  # Insert a new activity row, linked to the user matching the given Cognito ID.
   # Returns the new activity's UUID.
-  def create_activity(handle, message, expires_at):
+  def create_activity(cognito_user_id, message, expires_at):
     sql = """
       INSERT INTO public.activities (
         user_uuid,
@@ -56,7 +55,7 @@ class CreateActivity:
         expires_at
       )
       VALUES (
-        (SELECT uuid FROM public.users WHERE users.handle = %(handle)s LIMIT 1),
+        (SELECT uuid FROM public.users WHERE users.cognito_user_id = %(cognito_user_id)s LIMIT 1),
         %(message)s,
         %(expires_at)s
       )
@@ -65,7 +64,7 @@ class CreateActivity:
     with pool.connection() as conn:
       with conn.cursor() as cur:
         cur.execute(sql, {
-          'handle': handle,
+          'cognito_user_id': cognito_user_id,
           'message': message,
           'expires_at': expires_at,
         })

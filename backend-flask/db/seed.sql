@@ -1,7 +1,7 @@
 -- this file was manually created
 INSERT INTO public.users (display_name, handle, cognito_user_id)
 VALUES
-    ('Favyan', 'favyan', 'MOCK'),
+    ('Favyan', 'favyan', '04189408-7031-7084-79dd-8a914329978f'),
     ('Andrew Brown', 'andrewbrown', 'MOCK'),
     ('Hugo L', 'hugol', 'MOCK'),
     ('Andrew S', 'shark', 'MOCK');
@@ -20,7 +20,7 @@ VALUES
     (
         (SELECT uuid FROM public.users WHERE users.handle = 'hugol' LIMIT 1),
         (SELECT uuid FROM public.users WHERE users.handle = 'favyan' LIMIT 1),
-        'Hey Favyan! Just getting started with the bootcamp.',
+        'Hey Favyan! Just getting started.',
         current_timestamp - interval '2 hour'
     ),
     (
