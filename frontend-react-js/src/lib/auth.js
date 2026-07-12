@@ -17,6 +17,55 @@ export async function getAccessToken() {
   }
 }
 
+// Returns the Cognito ID token, or null.
+//
+// Cognito issues two tokens and they are not interchangeable:
+//   - the ACCESS token answers "is this request allowed?" — it carries 'sub' and little else
+//   - the ID token answers "who is this?" — it carries email, name and preferred_username
+//
+// Every normal API call sends the access token, because 'sub' is all the backend needs to
+// look you up. Provisioning is the one exception: to CREATE your row we need the attributes,
+// and only the ID token has them. Like the access token, this is refreshed automatically.
+export async function getIdToken() {
+  try {
+    const session = await fetchAuthSession();
+    return session.tokens?.idToken?.toString() ?? null;
+  } catch (err) {
+    console.log('Error fetching auth session:', err);
+    return null;
+  }
+}
+
+// Creates this user's row in our database, and returns it.
+//
+// Called only when /api/users/me came back 404 — i.e. Cognito knows you but our database
+// doesn't yet, which is exactly the state a brand-new account is in right after confirming
+// their email. The backend reads your handle and email out of the ID token's *verified*
+// claims, so nothing here can be spoofed by the browser.
+async function provisionCurrentUser() {
+  try {
+    const id_token = await getIdToken();
+    if (!id_token) return null;
+
+    const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/users/provision`;
+    const res = await fetch(backend_url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${id_token}`
+      }
+    });
+
+    if (res.status === 200) {
+      return await res.json();
+    }
+    console.log('provisionCurrentUser: unexpected status', res.status);
+    return null;
+  } catch (err) {
+    console.log('Error provisioning user:', err);
+    return null;
+  }
+}
+
 // Returns the signed-in user's row from OUR database, or null if there isn't one.
 //
 // Why ask the backend at all, when Amplify already knows who signed in? Because
@@ -45,9 +94,17 @@ export async function fetchCurrentUser() {
       return await res.json();
     }
 
-    // Anything else (401/404/500) means we have no usable user. Log the status so
-    // a 404 ("your Cognito account has no row in users") is distinguishable from
-    // a 401 ("your token was rejected") when you're staring at the console.
+    // 404 means: your token is perfectly valid, but our users table has no row for you.
+    // That is precisely what a brand-new account looks like the first time it signs in —
+    // Cognito created the account, but nothing has created the profile yet. So create it.
+    if (res.status === 404) {
+      console.log('No user row yet — provisioning one from the ID token.');
+      return await provisionCurrentUser();
+    }
+
+    // Anything else (401/500) means we have no usable user. Log the status so a 401
+    // ("your token was rejected") is distinguishable from a 500 ("the backend broke")
+    // when you're staring at the console.
     console.log('fetchCurrentUser: unexpected status', res.status);
     return null;
   } catch (err) {

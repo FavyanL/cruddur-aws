@@ -15,6 +15,7 @@ from services.messages import *
 from services.create_message import *
 from services.show_activity import *
 from services.show_me import *
+from services.provision_user import *
 
 from lib.cognito_jwt_token import CognitoJwtToken, extract_access_token, TokenVerifyError
 
@@ -155,6 +156,31 @@ def get_cognito_user_id():
     except TokenVerifyError:
         return None
 
+# Returns ALL claims from a verified JWT, or None.
+#
+# Cognito issues two different tokens and they carry different things:
+#   - the ACCESS token proves "this request is authenticated" and carries 'sub'
+#   - the ID token describes "who this person is" and carries 'sub' PLUS the user
+#     attributes: email, name, preferred_username
+#
+# Everywhere else in this app we send the access token, because all we need is 'sub'.
+# Provisioning is the one place we need the attributes, so it sends the ID token.
+#
+# expected_token_use pins down which one we'll accept. Without this check the two are
+# interchangeable to our verifier (it validates the signature but never looks at what
+# KIND of token it is), and a route could silently accept the wrong one. Being explicit
+# is the safer habit — this is the same discipline as scoping an IAM policy to exactly
+# the actions it needs.
+def get_cognito_claims(expected_token_use):
+    token = extract_access_token(request.headers)
+    try:
+        claims = cognito_jwt_token.verify(token)
+        if claims.get('token_use') != expected_token_use:
+            return None
+        return claims
+    except TokenVerifyError:
+        return None
+
 @app.after_request
 def after_request(response):
     timestamp =strftime('[%Y-%b-%d %H:%M]')
@@ -178,8 +204,43 @@ def data_me():
         return {'errors': ['unauthenticated']}, 401
     data = ShowMe.run(cognito_user_id=cognito_user_id)
     if data is None:
-        # Valid Cognito account, but no matching row in our users table
+        # Valid Cognito account, but no matching row in our users table.
+        # The frontend answers this by calling /api/users/provision below.
         return {'errors': ['user_not_found']}, 404
+    return data, 200
+
+@app.route("/api/users/provision", methods=['POST'])
+def data_provision_user():
+    # Expects the ID token (not the access token) — that's the only one carrying the
+    # email / name / preferred_username attributes we need to build the profile row.
+    claims = get_cognito_claims(expected_token_use='id')
+    if claims is None:
+        return {'errors': ['unauthenticated']}, 401
+
+    # Where does the handle live? Two possibilities, depending on how the pool is set up:
+    #
+    #   preferred_username  - an optional Cognito attribute. Nicer, because it lets the
+    #                         handle differ from the login username. Only present if the
+    #                         app client allows writing it.
+    #   cognito:username    - ALWAYS present on an ID token. In this pool the username IS
+    #                         the handle (email is only an alias), so this is our handle.
+    #
+    # Prefer the explicit attribute, fall back to the username. Reading both means this
+    # keeps working if you later enable preferred_username, without another code change.
+    handle = claims.get('preferred_username') or claims.get('cognito:username')
+    if not handle:
+        # Cognito knows this account but we can't determine a handle for it — nothing we
+        # invent would be right, so refuse rather than write a junk row.
+        return {'errors': ['missing_handle']}, 422
+
+    data = ProvisionUser.run(
+        cognito_user_id = claims['sub'],
+        email           = claims.get('email'),
+        handle          = handle,
+        display_name    = claims.get('name') or handle
+    )
+    if data is None:
+        return {'errors': ['provision_failed']}, 500
     return data, 200
 
 @app.route("/api/message_groups", methods=['GET'])

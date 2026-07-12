@@ -1,70 +1,101 @@
 import './ConfirmationPage.css';
 import React from "react";
-import { useParams } from 'react-router-dom';
-import {ReactComponent as Logo} from '../components/svg/logo.svg';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { ReactComponent as Logo } from '../components/svg/logo.svg';
 
-// [TODO] Authenication
-import Cookies from 'js-cookie'
+import { confirmSignUp, resendSignUpCode } from '@aws-amplify/auth';
 
 export default function ConfirmationPage() {
+  // `username` is the HANDLE — it's what Cognito knows this account by, and the only thing
+  // confirmSignUp()/resendSignUpCode() can address an UNCONFIRMED account with. The email
+  // is an alias, and aliases don't work until after confirmation, so it's useless here.
+  // We keep the email purely to tell the user where their code went.
+  const [username, setUsername] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [code, setCode] = React.useState('');
   const [errors, setErrors] = React.useState('');
   const [codeSent, setCodeSent] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
 
-  const params = useParams();
+  // These arrive from SignupPage as QUERY STRINGS: /confirm?username=me&email=me@example.com
+  // The old code used useParams(), which only reads dynamic *route* segments (/confirm/:email).
+  // Our route is a plain "/confirm", so useParams() always came back empty and the box was
+  // always blank. useSearchParams() is the one that reads ?key=value.
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  const code_onchange = (event) => {
-    setCode(event.target.value);
-  }
-  const email_onchange = (event) => {
-    setEmail(event.target.value);
-  }
+  React.useEffect(() => {
+    const usernameParam = searchParams.get('username');
+    const emailParam = searchParams.get('email');
+    if (usernameParam) setUsername(usernameParam);
+    if (emailParam) setEmail(emailParam);
+  }, [searchParams]);
 
+  const code_onchange = (event) => setCode(event.target.value);
+  const username_onchange = (event) => setUsername(event.target.value);
+
+  // Ask Cognito to email a fresh code. The old version of this function was empty —
+  // it logged 'resend_code' and did nothing at all.
   const resend_code = async (event) => {
-    console.log('resend_code')
-    // [TODO] Authenication
-  }
-
-  const onsubmit = async (event) => {
     event.preventDefault();
-    console.log('ConfirmationPage.onsubmit')
-    // [TODO] Authenication
-    if (Cookies.get('user.email') === undefined || Cookies.get('user.email') === '' || Cookies.get('user.email') === null){
-      setErrors("You need to provide an email in order to send Resend Activiation Code")   
-    } else {
-      if (Cookies.get('user.email') === email){
-        if (Cookies.get('user.confirmation_code') === code){
-          Cookies.set('user.logged_in',true)
-          window.location.href = "/"
-        } else {
-          setErrors("Code is not valid")
-        }
+    setErrors('');
+    try {
+      await resendSignUpCode({ username: username });
+      setCodeSent(true);
+    } catch (error) {
+      console.error('Error resending code:', error);
+      if (error.name === 'UserNotFoundException') {
+        setErrors('No account was found for that username.');
+      } else if (error.name === 'LimitExceededException') {
+        setErrors('Too many attempts. Wait a few minutes before requesting another code.');
       } else {
-        setErrors("Email is invalid or cannot be found.")   
+        setErrors(error.message);
       }
     }
-    return false
-  }
+  };
+
+  // THIS is the call that was missing, and it's why the post-confirmation Lambda never ran.
+  // confirmSignUp() is what marks the account confirmed in Cognito — and the Post Confirmation
+  // trigger fires off *that* event. The old code just compared cookies that nothing ever set,
+  // so Cognito was never told anything, and no trigger could ever fire.
+  const onsubmit = async (event) => {
+    event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setErrors('');
+
+    try {
+      await confirmSignUp({ username: username, confirmationCode: code });
+      // Confirmed, but NOT signed in — Cognito hands out no tokens here. Send them to sign
+      // in; their users row gets created on that first authenticated call to the backend.
+      navigate('/signin');
+    } catch (error) {
+      console.error('Error confirming sign up:', error);
+      if (error.name === 'CodeMismatchException') {
+        setErrors('That code is not correct. Check it and try again.');
+      } else if (error.name === 'ExpiredCodeException') {
+        setErrors('That code has expired. Request a new one below.');
+      } else {
+        setErrors(error.message);
+      }
+    } finally {
+      // Always re-enable the button, even when the request threw — otherwise one failed
+      // attempt would leave it disabled forever and strand you on this page.
+      setSubmitting(false);
+    }
+  };
 
   let el_errors;
-  if (errors){
+  if (errors) {
     el_errors = <div className='errors'>{errors}</div>;
   }
 
-
   let code_button;
-  if (codeSent){
+  if (codeSent) {
     code_button = <div className="sent-message">A new activation code has been sent to your email</div>
   } else {
     code_button = <button className="resend" onClick={resend_code}>Resend Activation Code</button>;
   }
-
-  React.useEffect(()=>{
-    if (params.email) {
-      setEmail(params.email)
-    }
-  }, [])
 
   return (
     <article className="confirm-article">
@@ -77,13 +108,14 @@ export default function ConfirmationPage() {
           onSubmit={onsubmit}
         >
           <h2>Confirm your Email</h2>
+          {email && <p className="sent-to">We sent a code to <strong>{email}</strong></p>}
           <div className='fields'>
-            <div className='field text_field email'>
-              <label>Email</label>
+            <div className='field text_field username'>
+              <label>Username</label>
               <input
                 type="text"
-                value={email}
-                onChange={email_onchange} 
+                value={username}
+                onChange={username_onchange}
               />
             </div>
             <div className='field text_field code'>
@@ -91,13 +123,15 @@ export default function ConfirmationPage() {
               <input
                 type="text"
                 value={code}
-                onChange={code_onchange} 
+                onChange={code_onchange}
               />
             </div>
           </div>
           {el_errors}
           <div className='submit'>
-            <button type='submit'>Confirm Email</button>
+            <button type='submit' disabled={submitting}>
+              {submitting ? 'Confirming…' : 'Confirm Email'}
+            </button>
           </div>
         </form>
       </div>
