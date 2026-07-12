@@ -14,6 +14,7 @@ from services.message_groups import *
 from services.messages import *
 from services.create_message import *
 from services.show_activity import *
+from services.show_me import *
 
 from lib.cognito_jwt_token import CognitoJwtToken, extract_access_token, TokenVerifyError
 
@@ -169,6 +170,17 @@ def rollbar_test():
 def home():
     with tracer.start_as_current_span("home-handler"):
         return {"message": "Hello, Honeycomb!"}, 200
+
+@app.route("/api/users/me", methods=['GET'])
+def data_me():
+    cognito_user_id = get_cognito_user_id()
+    if cognito_user_id is None:
+        return {'errors': ['unauthenticated']}, 401
+    data = ShowMe.run(cognito_user_id=cognito_user_id)
+    if data is None:
+        # Valid Cognito account, but no matching row in our users table
+        return {'errors': ['user_not_found']}, 404
+    return data, 200
 
 @app.route("/api/message_groups", methods=['GET'])
 def data_message_groups():
