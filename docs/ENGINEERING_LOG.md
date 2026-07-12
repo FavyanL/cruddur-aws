@@ -101,6 +101,21 @@ console.
 
 Fixed 2026-07-12. Nothing snapshots the token any more; every request asks Amplify fresh.
 
+### The sign-out trap (also fixed 2026-07-12)
+
+Related, and worth understanding as a *design* lesson rather than a bug: every signed-in
+control — Profile, Crud, and the **Sign Out** button inside `ProfileInfo` — lived in a single
+`if (props.user)` block in `DesktopNavigation.js`, with **no `else`**. So when a session died,
+the app hid the exit. You could not sign out of a broken sign-in.
+
+The nav now renders a **Sign In** link in the `else` branch. `SigninPage` also calls
+`signOut()` before `signIn()`, because Amplify keeps stale credentials in localStorage after a
+refresh token expires, and `signIn()` throws `UserAlreadyAuthenticatedException` in that state
+— which would have stranded you on the sign-in page instead.
+
+**The general lesson:** whenever UI is gated on a condition, ask what the *other* branch shows.
+An `if` with no `else` around auth state is how users get locked out of their own recovery path.
+
 ### The two functions in `src/lib/auth.js`
 
 - `getAccessToken()` — returns a currently-valid token, or `null`. Auto-refreshes.
@@ -166,10 +181,7 @@ If `/api/users/me` ever returns **404**, the first thing to check is that your r
 
 Roughly in priority order.
 
-1. **No way to sign out when the nav thinks you're signed out.** The Sign Out button is inside
-   `if (props.user)` in `DesktopNavigation.js`. The token-refresh fix makes this much rarer,
-   but the trap is still there. The signed-out nav should offer a **Sign In** link.
-2. **Sign-up and forgot-password don't work.** They need Cognito email verification wiring.
+1. **Sign-up and forgot-password don't work.** They need Cognito email verification wiring.
    `ConfirmationPage.js` still runs on the old cookie logic — it calls
    `Cookies.set('user.logged_in', true)`, which **nothing reads any more**. That whole page
    needs rewriting against Cognito's `confirmSignUp()`.

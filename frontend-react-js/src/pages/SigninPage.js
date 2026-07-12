@@ -2,7 +2,7 @@ import './SigninPage.css';
 import React, { useState } from "react";
 import { ReactComponent as Logo } from '../components/svg/logo.svg';
 import { Link, useNavigate } from "react-router-dom";
-import { signIn } from '@aws-amplify/auth';
+import { signIn, signOut } from '@aws-amplify/auth';
 
 export default function SigninPage({ refreshUser }) { // Accept refreshUser function from App.js
   const navigate = useNavigate(); 
@@ -15,6 +15,18 @@ export default function SigninPage({ refreshUser }) { // Accept refreshUser func
     setErrors('');
     
     try {
+      // Clear any dead session Amplify may still be holding before signing in.
+      //
+      // If a refresh token has expired, Amplify still has stale credentials sitting in
+      // localStorage even though nothing about them works any more. In that state
+      // signIn() throws UserAlreadyAuthenticatedException ("you're already signed in")
+      // and you'd be stuck on this page unable to sign in OR sign out. Clearing first
+      // makes signing in always safe. It's a no-op when there's no session to clear,
+      // so the catch is intentionally empty.
+      try {
+        await signOut();
+      } catch (e) { /* nothing to sign out of — fine */ }
+
       const { isSignedIn } = await signIn({ username: email, password });
 
       console.log("Signed in:", isSignedIn);

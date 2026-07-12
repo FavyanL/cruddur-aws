@@ -11,6 +11,7 @@ export default function DesktopNavigation(props) {
   let notificationsLink;
   let messagesLink;
   let profileLink;
+  let signinLink;
   if (props.user) {
     button = <CrudButton setPopped={props.setPopped} />;
     profile = <ProfileInfo user={props.user} />;
@@ -29,6 +30,16 @@ export default function DesktopNavigation(props) {
       name="Profile"
       handle="profile"
       active={props.active} />
+  } else {
+    // No user means either "never signed in" or "session expired". Either way the
+    // signed-in nav (including the Sign Out button inside ProfileInfo) is hidden,
+    // so without this link there is literally no way out of the app from the UI —
+    // you'd have to clear localStorage by hand in the console to recover.
+    signinLink = <DesktopNavigationLink
+      url="/signin"
+      name="Sign In"
+      handle="signin"
+      active={props.active} />
   }
 
   return (
@@ -41,10 +52,11 @@ export default function DesktopNavigation(props) {
       {notificationsLink}
       {messagesLink}
       {profileLink}
-      <DesktopNavigationLink url="/#" 
-        name="More" 
+      <DesktopNavigationLink url="/#"
+        name="More"
         handle="more"
         active={props.active} />
+      {signinLink}
       {button}
       {profile}
     </nav>

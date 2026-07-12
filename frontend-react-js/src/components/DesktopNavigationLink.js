@@ -31,6 +31,11 @@ export default function DesktopNavigationLink(props) {
       case 'messages':
         return <MessagesIcon className='icon' />
         break;
+      case 'signin':
+        // Reuse the profile glyph — we have no dedicated sign-in icon, and without
+        // any icon the link sits misaligned against the others in the nav.
+        return <ProfileIcon className='icon' />
+        break;
     }
   }
 
