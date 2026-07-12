@@ -6,6 +6,7 @@ import DesktopNavigation  from '../components/DesktopNavigation';
 import MessageGroupFeed from '../components/MessageGroupFeed';
 import MessagesFeed from '../components/MessageFeed';
 import MessagesForm from '../components/MessageForm';
+import { getAccessToken } from '../lib/auth';
 
 // [TODO] Authenication
 import Cookies from 'js-cookie'
@@ -21,10 +22,12 @@ export default function MessageGroupPage() {
   const loadMessageGroupsData = async () => {
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/message_groups`
+      // Ask Amplify for the token at request time; it refreshes silently if expired.
+      const access_token = await getAccessToken();
       const res = await fetch(backend_url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+          Authorization: `Bearer ${access_token}`
         }
       });
       let resJson = await res.json();
@@ -45,10 +48,12 @@ export default function MessageGroupPage() {
       const cleanHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
       const handle = `@${cleanHandle}`;
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/messages/${handle}`
+      // Ask Amplify for the token at request time; it refreshes silently if expired.
+      const access_token = await getAccessToken();
       const res = await fetch(backend_url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+          Authorization: `Bearer ${access_token}`
         }
       });
       let resJson = await res.json();

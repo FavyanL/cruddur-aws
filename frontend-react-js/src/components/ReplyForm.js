@@ -4,6 +4,7 @@ import process from 'process';
 import {ReactComponent as BombIcon} from './svg/bomb.svg';
 
 import ActivityContent  from '../components/ActivityContent';
+import { getAccessToken } from '../lib/auth';
 
 export default function ReplyForm(props) {
   const [count, setCount] = React.useState(0);
@@ -22,12 +23,14 @@ export default function ReplyForm(props) {
     setSubmitting(true);
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/activities/${props.activity.uuid}/reply`
+      // Ask Amplify for the token at request time; it refreshes silently if expired.
+      const access_token = await getAccessToken();
       const res = await fetch(backend_url, {
         method: "POST",
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+          Authorization: `Bearer ${access_token}`
         },
         body: JSON.stringify({
           message: message

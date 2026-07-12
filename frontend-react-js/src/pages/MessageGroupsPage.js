@@ -3,6 +3,7 @@ import React from "react";
 
 import DesktopNavigation  from '../components/DesktopNavigation';
 import MessageGroupFeed from '../components/MessageGroupFeed';
+import { getAccessToken } from '../lib/auth';
 
 // [TODO] Authenication
 import Cookies from 'js-cookie'
@@ -16,10 +17,12 @@ export default function MessageGroupsPage() {
   const loadData = async () => {
     try {
       const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/message_groups`
+      // Ask Amplify for the token at request time; it refreshes silently if expired.
+      const access_token = await getAccessToken();
       const res = await fetch(backend_url, {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+          Authorization: `Bearer ${access_token}`
         }
       });
       let resJson = await res.json();

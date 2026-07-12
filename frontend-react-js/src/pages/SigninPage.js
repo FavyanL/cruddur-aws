@@ -2,7 +2,7 @@ import './SigninPage.css';
 import React, { useState } from "react";
 import { ReactComponent as Logo } from '../components/svg/logo.svg';
 import { Link, useNavigate } from "react-router-dom";
-import { signIn, fetchAuthSession } from '@aws-amplify/auth';
+import { signIn } from '@aws-amplify/auth';
 
 export default function SigninPage({ refreshUser }) { // Accept refreshUser function from App.js
   const navigate = useNavigate(); 
@@ -19,11 +19,10 @@ export default function SigninPage({ refreshUser }) { // Accept refreshUser func
 
       console.log("Signed in:", isSignedIn);
 
-      // Amplify v6: tokens come from fetchAuthSession(), not the signIn result
-      if (isSignedIn) {
-        const session = await fetchAuthSession();
-        localStorage.setItem("access_token", session.tokens.accessToken.toString());
-      }
+      // No token is copied out here on purpose. Amplify already holds the session
+      // after signIn(); callers get a fresh (auto-refreshed) token from
+      // getAccessToken() in lib/auth.js at the moment they need it. Snapshotting
+      // the token here would go stale in ~1 hour and 401 every request after that.
 
       refreshUser(); // Update the user state immediately
       navigate("/"); // Redirect user to homepage

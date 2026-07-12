@@ -2,6 +2,7 @@ import './MessageForm.css';
 import React from "react";
 import process from 'process';
 import { useParams } from 'react-router-dom';
+import { getAccessToken } from '../lib/auth';
 
 export default function ActivityForm(props) {
   const [count, setCount] = React.useState(0);
@@ -25,12 +26,14 @@ export default function ActivityForm(props) {
       const rawHandle = params.handle;
       const cleanHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
       console.log('onsubmit payload', message)
+      // Ask Amplify for the token at request time; it refreshes silently if expired.
+      const access_token = await getAccessToken();
       const res = await fetch(backend_url, {
         method: "POST",
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`
+          Authorization: `Bearer ${access_token}`
         },
         body: JSON.stringify({
           message: message,
