@@ -1,16 +1,13 @@
 import './HomeFeedPage.css';
 import React from "react";
 
-import { getAccessToken } from '../lib/auth';
+import { getAccessToken, fetchCurrentUser } from '../lib/auth';
 
 import DesktopNavigation from '../components/DesktopNavigation';
 import DesktopSidebar from '../components/DesktopSidebar';
 import ActivityFeed from '../components/ActivityFeed';
 import ActivityForm from '../components/ActivityForm';
 import ReplyForm from '../components/ReplyForm';
-
-// [TODO] Authentication
-import Cookies from 'js-cookie';
 
 export default function HomeFeedPage() {
   const [activities, setActivities] = React.useState([]);
@@ -43,25 +40,8 @@ export default function HomeFeedPage() {
   };
 
   const checkAuth = async () => {
-    try {
-      const backend_url = `${process.env.REACT_APP_BACKEND_URL}/api/users/me`;
-      // Ask Amplify for the token at request time; it refreshes silently if expired.
-      const access_token = await getAccessToken();
-      const res = await fetch(backend_url, {
-        headers: {
-          Authorization: `Bearer ${access_token}`
-        },
-        method: "GET"
-      });
-      let resJson = await res.json();
-      if (res.status === 200) {
-        setUser(resJson);
-      } else {
-        console.log(res);
-      }
-    } catch (error) {
-      console.log('Error fetching user:', error);
-    }
+    // fetchCurrentUser() returns our DB row for the signed-in user, or null.
+    setUser(await fetchCurrentUser());
   };
 
   React.useEffect(() => {

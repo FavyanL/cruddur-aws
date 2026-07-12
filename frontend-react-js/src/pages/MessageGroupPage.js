@@ -6,10 +6,7 @@ import DesktopNavigation  from '../components/DesktopNavigation';
 import MessageGroupFeed from '../components/MessageGroupFeed';
 import MessagesFeed from '../components/MessageFeed';
 import MessagesForm from '../components/MessageForm';
-import { getAccessToken } from '../lib/auth';
-
-// [TODO] Authenication
-import Cookies from 'js-cookie'
+import { getAccessToken, fetchCurrentUser } from '../lib/auth';
 
 export default function MessageGroupPage() {
   const [messageGroups, setMessageGroups] = React.useState([]);
@@ -68,14 +65,8 @@ export default function MessageGroupPage() {
   };  
 
   const checkAuth = async () => {
-    console.log('checkAuth')
-    // [TODO] Authenication
-    if (Cookies.get('user.logged_in')) {
-      setUser({
-        display_name: Cookies.get('user.name'),
-        handle: Cookies.get('user.username')
-      })
-    }
+    // fetchCurrentUser() returns our DB row for the signed-in user, or null.
+    setUser(await fetchCurrentUser());
   };
 
   // Load the conversation list and current user once, on first mount.

@@ -7,9 +7,7 @@ import DesktopSidebar     from '../components/DesktopSidebar';
 import ActivityFeed from '../components/ActivityFeed';
 import ActivityForm from '../components/ActivityForm';
 import ReplyForm from '../components/ReplyForm';
-
-// [TODO] Authenication
-import Cookies from 'js-cookie'
+import { fetchCurrentUser } from '../lib/auth';
 
 export default function UserFeedPage() {
   const [activities, setActivities] = React.useState([]);
@@ -43,14 +41,8 @@ export default function UserFeedPage() {
   };
 
   const checkAuth = async () => {
-    console.log('checkAuth')
-    // [TODO] Authenication
-    if (Cookies.get('user.logged_in')) {
-      setUser({
-        display_name: Cookies.get('user.name'),
-        handle: Cookies.get('user.username')
-      })
-    }
+    // fetchCurrentUser() returns our DB row for the signed-in user, or null.
+    setUser(await fetchCurrentUser());
   };
 
   React.useEffect(()=>{
