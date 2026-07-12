@@ -1,0 +1,250 @@
+# Cruddur — Engineering Log
+
+**What this is:** a durable record of how this app actually works, what's been built, what's
+broken, and why. It lives in the repo so it survives when a chat session dies.
+
+**If you are an AI assistant picking this project up:** read this file first, then run
+`git log --oneline -15` and `git status` to see anything that happened after the last update
+below. Fabian is learning cloud engineering as a career change — he is not a developer yet.
+He reads code well when it's explained, prefers to be pointed at specific files and line
+numbers, and wants to understand *why* something is broken before seeing the fix. He makes
+small edits himself; larger changes should be written for him, with the interesting parts
+commented. Propose a plan before sweeping changes.
+
+**Last updated:** 2026-07-12
+
+---
+
+## 1. Current state
+
+The app runs locally in Docker Compose and works end to end for a signed-in user:
+home feed, profile page, replies, and direct messages all persist to Postgres.
+
+**Authentication is real.** As of 2026-07-12 there is no hardcoded user anywhere in the
+request path. The signed-in user is derived from a cryptographically verified Cognito JWT
+and looked up in our own `users` table. (Older notes and handoff prompts claim `app.py`
+hardcodes the handle `favyan` — that is **out of date**. It was fixed in `54d0107` and
+completed in `d9fc32b` / `904b321` / `598d451`.)
+
+### Containers
+
+| Service | Port | Notes |
+|---|---|---|
+| `backend-flask` | 4567 | Flask, Python 3.10. **Does not hot-reload — must be restarted.** |
+| `frontend-react-js` | 3000 | React 18, CRA. Hot-reloads on save. |
+| `db` | 5432 | Postgres 13. Database name: `cruddur`, user: `postgres`. |
+| `dynamodb-local` | 8000 | Present, not yet used. |
+| `xray-daemon` | 2000 | AWS X-Ray tracing. Picks up new routes automatically. |
+
+### Commands worth memorising
+
+```bash
+docker compose up                       # start the stack
+docker compose ps                       # what's running
+docker compose restart backend-flask    # ← reload Python changes. The one to remember.
+docker compose logs --tail=40 backend-flask
+docker compose logs --tail=40 frontend-react-js
+docker compose exec db psql -U postgres -d cruddur -c "SELECT handle, cognito_user_id FROM users;"
+```
+
+The frontend reloads itself; the backend does not. Most "my change didn't do anything"
+moments are a missing `docker compose restart backend-flask`.
+
+---
+
+## 2. How authentication actually works
+
+This is the most important thing in the codebase to understand, and it's the closest thing
+here to real cloud engineering — IAM roles, API Gateway authorizers and service-to-service
+auth are all this same idea in AWS costume.
+
+### The chain, end to end
+
+1. **Sign in.** `SigninPage.js` calls Amplify's `signIn()`. Amplify stores the session
+   (access token + refresh token) internally, in browser localStorage under
+   `CognitoIdentityServiceProvider.*` keys. **We deliberately do not copy the token out.**
+2. **Any API call.** The caller asks `getAccessToken()` (`src/lib/auth.js`) for a token
+   *at the moment of the request*. That calls Amplify's `fetchAuthSession()`, which returns
+   the cached token if it's still valid, or silently uses the refresh token to mint a new one
+   if it has expired.
+3. **The request** goes out with `Authorization: Bearer <token>`.
+4. **The backend verifies it.** `app.py` → `get_cognito_user_id()` → `cognito_jwt_token.verify()`
+   checks the token's *signature* against Cognito's public keys. If it's forged or expired,
+   this raises `TokenVerifyError` and the route returns **401**.
+5. **Only after verifying** does the backend read the `sub` claim — Cognito's permanent unique
+   id for that account.
+6. **Look up who that is to us.** `services/show_me.py` (`ShowMe.run`) selects the row from
+   `users` where `cognito_user_id = sub`, returning `uuid`, `display_name`, `handle`.
+7. **The frontend receives its own identity** from `/api/users/me` and renders the nav,
+   profile link, etc. from it.
+
+The key idea: identity is **derived**, never **asserted**. The client never gets to say
+"I am favyan" — it presents a token, and the backend works out who that is.
+
+### Why we don't cache the token (the bug that ate three sessions)
+
+`SigninPage` used to do this:
+
+```js
+localStorage.setItem("access_token", session.tokens.accessToken.toString());  // DON'T
+```
+
+That takes a *photocopy* of the token. Cognito access tokens live about **one hour**. The
+photocopy doesn't expire — it just silently becomes **wrong**. So an hour after signing in,
+every request would send a dead token and get 401s.
+
+It was worse than a plain 401, because of a trap: the nav's Profile, Crud and **Sign Out**
+buttons all live inside `if (props.user)` in `DesktopNavigation.js`. When the token died,
+`user` became `null`, so the app hid the sign-out button — *you could not sign out to fix
+being signed out.* The escape hatch was typing `localStorage.clear()` into the DevTools
+console.
+
+Fixed 2026-07-12. Nothing snapshots the token any more; every request asks Amplify fresh.
+
+### The two functions in `src/lib/auth.js`
+
+- `getAccessToken()` — returns a currently-valid token, or `null`. Auto-refreshes.
+- `fetchCurrentUser()` — calls `/api/users/me` with a fresh token, returns our DB row for
+  the user, or `null`. Used by all five pages' `checkAuth()`.
+
+`/api/users/me` is referenced in exactly **one place** in the frontend (`lib/auth.js`).
+If you add a page that needs to know who's signed in, call `fetchCurrentUser()` — don't
+re-implement the fetch.
+
+---
+
+## 3. Reading errors — a triage guide
+
+When `/api/users/me` (or any authed route) misbehaves, the status code tells you *which layer*
+failed. Check it in DevTools → Network before touching any code.
+
+| Status | Meaning | Where to look |
+|---|---|---|
+| **401** | Token missing, forged, or expired. | Request Headers — is `Authorization` present? `Bearer null` means `getAccessToken()` returned null, i.e. Amplify doesn't think you're signed in. |
+| **404** | Token was *valid*, but no `users` row matches its `sub`. | The DB, not the code. `SELECT handle, cognito_user_id FROM users;` — your row needs a real `cognito_user_id`, not `MOCK`. |
+| **500** | The route registered but the Python blew up. | `docker compose logs --tail=40 backend-flask` |
+| **404 from Flask itself** (HTML, not JSON) | The route never registered. | Did you restart the backend? |
+
+A **401 from `curl` with no token is the correct answer** — it means the route is guarding
+itself. Don't mistake it for a failure.
+
+### Reading webpack output
+
+`docker compose logs frontend-react-js` prints a wall of yellow. Jump straight to the last
+line:
+
+- `webpack compiled with N warnings` → **fine.** Warnings are style complaints.
+- `Failed to compile` → **broken.** Read the error above it.
+- `Module not found: Can't resolve '...'` → a bad import path.
+
+Warnings can still be *informative*: `'Cookies' is defined but never used` was what revealed
+four pages of abandoned cookie-based auth.
+
+---
+
+## 4. Database notes
+
+`users` table, as of the last check:
+
+| handle | cognito_user_id |
+|---|---|
+| `andrewbrown` | `MOCK` |
+| `hugol` | `MOCK` |
+| `shark` | `MOCK` |
+| `favyan` | *(real Cognito sub)* |
+
+The three `MOCK` rows are seed data so message threads have someone to talk to. Nobody can
+sign in as them — no real Cognito account maps to `MOCK`. That's fine and intentional for now.
+
+If `/api/users/me` ever returns **404**, the first thing to check is that your row's
+`cognito_user_id` still matches the `sub` of the Cognito account you're signing in with.
+(If you rebuild the Cognito user pool, every `sub` changes and this will break.)
+
+---
+
+## 5. Open problems
+
+Roughly in priority order.
+
+1. **No way to sign out when the nav thinks you're signed out.** The Sign Out button is inside
+   `if (props.user)` in `DesktopNavigation.js`. The token-refresh fix makes this much rarer,
+   but the trap is still there. The signed-out nav should offer a **Sign In** link.
+2. **Sign-up and forgot-password don't work.** They need Cognito email verification wiring.
+   `ConfirmationPage.js` still runs on the old cookie logic — it calls
+   `Cookies.set('user.logged_in', true)`, which **nothing reads any more**. That whole page
+   needs rewriting against Cognito's `confirmSignUp()`.
+3. **`App.js` has a second, competing idea of the current user.** It calls Amplify's
+   `getCurrentUser()` directly to gate the `/` route, while every page below it uses
+   `fetchCurrentUser()`. Two sources of truth. Should be unified.
+4. **The "More" button in the sidebar does nothing.** Either give it a purpose or remove it.
+5. **AWS deployment** hasn't started. The eventual target is ECS Fargate + RDS + S3/CloudFront.
+
+---
+
+## 6. Gotchas already paid for
+
+Things that cost real time once. Don't rediscover them.
+
+- **`/@:handle` does not work in react-router-dom 6.4.3.** A literal `@` before a dynamic
+  segment doesn't match. The workaround throughout this codebase is a route of `/:handle`
+  plus normalisation — strip a leading `@` if present:
+  ```js
+  const cleanHandle = rawHandle.startsWith('@') ? rawHandle.slice(1) : rawHandle;
+  ```
+- **Secrets go in `.env`, which is gitignored.** The Honeycomb API key lives there.
+  Never commit a secret, even in an example.
+- **The backend does not hot-reload.** `docker compose restart backend-flask`.
+- **Amplify v6 changed everything.** Tokens come from `fetchAuthSession()`, not from the
+  `signIn()` result. Most tutorials online are v5 and will mislead you.
+
+---
+
+## 7. Commit history worth knowing
+
+```
+598d451  Resolve current user via shared fetchCurrentUser() on every page
+904b321  Fetch identity from /api/users/me and stop caching the access token
+d9fc32b  Add /api/users/me endpoint to resolve signed-in user from JWT
+5f71d66  Wire up ReplyForm on profile page to fix crash on reply
+54d0107  Derive user identity from verified Cognito JWT instead of hardcoded handle
+10ad01b  Fix Amplify v6 token storage and send auth header on API calls
+d711eb5  Disable submit buttons while POST is in flight to prevent duplicates
+393b5b9  Move Honeycomb secrets to .env; add .env to gitignore
+2d6d1c1  Implement real DB-backed messages and complete profile/reply fixes
+5602b5a  Implement real DB persistence for activities, fix home feed SQL
+```
+
+Together, `d9fc32b` → `598d451` are the arc that replaced all the fake identity scaffolding
+with real Cognito-derived identity.
+
+---
+
+## 8. Conventions
+
+- Commit in **logical groups** with descriptive messages explaining *why*, not just what.
+- Reusable patterns to keep using:
+
+  **Guard against double-submit** (all three forms use this):
+  ```js
+  const [submitting, setSubmitting] = React.useState(false);
+  const onsubmit = async (event) => {
+    event.preventDefault();
+    if (submitting) return;        // ignore extra clicks
+    setSubmitting(true);
+    try {
+      // ...fetch...
+    } finally {
+      setSubmitting(false);        // ALWAYS re-enable, even if the fetch threw
+    }
+  };
+  ```
+  The `finally` is what stops a failed request leaving the button disabled forever.
+
+  **Any authenticated fetch:**
+  ```js
+  const access_token = await getAccessToken();   // fresh every time — never cached
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${access_token}` }
+  });
+  ```
