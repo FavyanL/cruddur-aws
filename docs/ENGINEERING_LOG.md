@@ -116,15 +116,19 @@ refresh token expires, and `signIn()` throws `UserAlreadyAuthenticatedException`
 **The general lesson:** whenever UI is gated on a condition, ask what the *other* branch shows.
 An `if` with no `else` around auth state is how users get locked out of their own recovery path.
 
-### The two functions in `src/lib/auth.js`
+### `src/lib/auth.js` — the only file that talks to Cognito or `/api/users/*`
 
-- `getAccessToken()` — returns a currently-valid token, or `null`. Auto-refreshes.
-- `fetchCurrentUser()` — calls `/api/users/me` with a fresh token, returns our DB row for
-  the user, or `null`. Used by all five pages' `checkAuth()`.
+- `getAccessToken()` — a currently-valid **access** token, or `null`. Auto-refreshes.
+- `getIdToken()` — a currently-valid **ID** token, or `null`. Also auto-refreshes. Needed only
+  for provisioning, because it's the only token carrying `email` / `name` / `cognito:username`.
+- `fetchCurrentUser()` — calls `/api/users/me`, returns our DB row for the user, or `null`.
+  On a **404** it provisions the row instead of giving up (see §5). Used by all five pages'
+  `checkAuth()`.
+- `provisionCurrentUser()` — private. Posts the ID token to `/api/users/provision`.
 
-`/api/users/me` is referenced in exactly **one place** in the frontend (`lib/auth.js`).
-If you add a page that needs to know who's signed in, call `fetchCurrentUser()` — don't
-re-implement the fetch.
+`/api/users/me` and `/api/users/provision` are each referenced in exactly **one place** in the
+frontend. If you add a page that needs to know who's signed in, call `fetchCurrentUser()` —
+don't re-implement the fetch.
 
 ---
 
@@ -171,29 +175,131 @@ four pages of abandoned cookie-based auth.
 The three `MOCK` rows are seed data so message threads have someone to talk to. Nobody can
 sign in as them — no real Cognito account maps to `MOCK`. That's fine and intentional for now.
 
-If `/api/users/me` ever returns **404**, the first thing to check is that your row's
-`cognito_user_id` still matches the `sub` of the Cognito account you're signing in with.
-(If you rebuild the Cognito user pool, every `sub` changes and this will break.)
+Real users (`favyan`, plus anyone who signs up) have a genuine Cognito `sub` here. New rows
+are created automatically on first sign-in — see §5.
+
+A **404** from `/api/users/me` is no longer an error state: it's the normal condition of a
+brand-new account, and the frontend answers it by provisioning. If you rebuild the Cognito
+user pool, every `sub` changes, and existing rows will stop matching.
 
 ---
 
-## 5. Open problems
+## 5. Sign-up, and how a user gets into the database
+
+Sign-up worked for the first time on 2026-07-12. It had never worked before, and the reason
+is a good lesson in stacked failures — **four separate bugs, each one hiding the next.**
+
+### The flow now
+
+1. `SignupPage` calls Amplify `signUp()`. **The Cognito username is the handle, not the email.**
+   This pool has email as an *alias*, and Cognito forbids an email-shaped username in that
+   configuration (`Username cannot be of email format`). You still *sign in* with your email —
+   that is what the alias is for.
+2. Cognito emails a verification code.
+3. `ConfirmationPage` calls `confirmSignUp({ username: <handle>, confirmationCode })`.
+   **It must address the account by handle, not email:** alias attributes do not work until
+   *after* an account is confirmed, and an unconfirmed account is exactly what this is.
+4. User signs in. `fetchCurrentUser()` calls `/api/users/me` → **404**, because Cognito knows
+   them but Postgres doesn't.
+5. The 404 triggers `POST /api/users/provision`, sending the **ID token**. The backend verifies
+   it, reads `sub` / `email` / `name` / `cognito:username` from the *verified claims*, and
+   INSERTs the row. The browser never gets to assert its own handle.
+
+### Access token vs ID token — the distinction that made this possible
+
+Cognito issues two tokens and they are **not** interchangeable:
+
+- **Access token** — "is this request allowed?" Carries `sub`, and little else.
+- **ID token** — "who is this?" Carries `sub` **plus** `email`, `name`, `preferred_username`,
+  `cognito:username`.
+
+Every ordinary API call sends the access token, because `sub` is all the backend needs to look
+you up. Provisioning is the one place that needs the attributes, so it sends the ID token.
+`get_cognito_claims(expected_token_use)` in `app.py` pins down which one a route will accept —
+without that check the verifier would take either, since it validates the *signature* but
+never asks what **kind** of token it is.
+
+### The four bugs, and why each hid the next
+
+1. `SignupPage` passed attributes as `attributes: {...}` — the **Amplify v5** shape. v6 wants
+   `options: { userAttributes: {...} }`, and **silently ignores the old key.** So accounts were
+   created with no email at all, and no verification mail could ever be sent.
+2. The Username input read `value={username}` but wrote with `setName()` — bound to one state,
+   updated by another. It could not change as you typed.
+3. `ConfirmationPage` never called Cognito. It compared cookies (`user.confirmation_code`) that
+   nothing ever set. **So `confirmSignUp()` was never invoked...**
+4. ...**which meant the Post Confirmation Lambda trigger never fired** — and so nobody ever saw
+   that it was broken. See below.
+
+You could not see bug 4 until bug 3 was fixed. That is why "it never worked and I don't know
+why" was an honest description of the situation.
+
+### The Lambda (`aws/json/lambdas/cruddur-post-confirmation.py`)
+
+It **was attached to the user pool all along**, and it crashed on import:
+
+```
+Unable to import module 'lambda_function': No module named 'psycopg2._psycopg'
+```
+
+`psycopg2` is a **C extension** — `_psycopg` is a compiled binary. A build made on macOS will
+not load on Lambda's Amazon Linux. It needs `aws-psycopg2` or a prebuilt layer.
+
+Two things worth carrying forward:
+
+- **A failing Lambda trigger does not degrade quietly — it sits in the critical path.**
+  Cognito reports the trigger's error straight back to the client.
+- **"Pre" and "Post" are load-bearing words.** Post Confirmation runs *after* Cognito has
+  already flipped the account to CONFIRMED. So the account got confirmed anyway, and the error
+  arrived afterwards — which is why an account could end up CONFIRMED even though the UI showed
+  a failure. A **Pre** Sign-up trigger failing would genuinely have blocked the operation.
+
+**The trigger is now detached from the pool** (the Lambda function still exists in AWS). The
+code has since been fixed — packaging notes, the `finally: if conn` `NameError`, and an
+idempotent INSERT. Do not re-attach it until the DB is on RDS and psycopg2 is packaged for the
+Lambda runtime, or sign-up breaks for everyone again.
+
+### Cognito's built-in email is rate-limited
+
+~50 messages/day across the whole pool, and it sends from an untrusted domain, so codes land in
+spam constantly. Wiring the pool to **SES** is the real fix and is still outstanding.
+
+### The admin back door
+
+If someone gets stuck unconfirmed:
+
+```bash
+aws cognito-idp admin-confirm-sign-up --user-pool-id <POOL_ID> --username <handle>
+aws cognito-idp admin-delete-user     --user-pool-id <POOL_ID> --username <handle>
+```
+
+**Do not use `aws cognito-idp update-user-pool` to change pool settings.** It *replaces* the
+configuration rather than patching it — anything you don't re-specify is silently reset to
+default. Use the console, which does a read-modify-write for you.
+
+---
+
+## 6. Open problems
 
 Roughly in priority order.
 
-1. **Sign-up and forgot-password don't work.** They need Cognito email verification wiring.
-   `ConfirmationPage.js` still runs on the old cookie logic — it calls
-   `Cookies.set('user.logged_in', true)`, which **nothing reads any more**. That whole page
-   needs rewriting against Cognito's `confirmSignUp()`.
+1. **Forgot-password still doesn't work.** `RecoverPage.js` is untouched scaffolding. It needs
+   Cognito's `resetPassword()` / `confirmResetPassword()`, and it will hit the same
+   handle-vs-email question sign-up did: address the account by its **username**.
+2. **`handle` has no UNIQUE constraint in Postgres.** Cognito enforces username uniqueness, so
+   two people can't take the same handle *via sign-up* — but nothing at the database level
+   stops it. A `UNIQUE` constraint on `users.handle` would make the guarantee real rather than
+   incidental.
 3. **`App.js` has a second, competing idea of the current user.** It calls Amplify's
    `getCurrentUser()` directly to gate the `/` route, while every page below it uses
    `fetchCurrentUser()`. Two sources of truth. Should be unified.
+4. **Cognito's built-in email should be replaced with SES.** ~50/day, lands in spam.
 4. **The "More" button in the sidebar does nothing.** Either give it a purpose or remove it.
 5. **AWS deployment** hasn't started. The eventual target is ECS Fargate + RDS + S3/CloudFront.
 
 ---
 
-## 6. Gotchas already paid for
+## 7. Gotchas already paid for
 
 Things that cost real time once. Don't rediscover them.
 
@@ -211,7 +317,7 @@ Things that cost real time once. Don't rediscover them.
 
 ---
 
-## 7. Commit history worth knowing
+## 8. Commit history worth knowing
 
 ```
 598d451  Resolve current user via shared fetchCurrentUser() on every page
@@ -231,7 +337,7 @@ with real Cognito-derived identity.
 
 ---
 
-## 8. Conventions
+## 9. Conventions
 
 - Commit in **logical groups** with descriptive messages explaining *why*, not just what.
 - Reusable patterns to keep using:
