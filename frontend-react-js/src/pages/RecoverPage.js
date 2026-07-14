@@ -2,25 +2,61 @@ import './RecoverPage.css';
 import React from "react";
 import {ReactComponent as Logo} from '../components/svg/logo.svg';
 import { Link } from "react-router-dom";
+import { resetPassword, confirmResetPassword } from '@aws-amplify/auth';
 
 export default function RecoverPage() {
-  // Username is Eamil
+  // The account is already CONFIRMED by the time anyone recovers a password,
+  // so Cognito's email alias works here — email or handle both address the account.
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [passwordAgain, setPasswordAgain] = React.useState('');
   const [code, setCode] = React.useState('');
   const [errors, setErrors] = React.useState('');
   const [formState, setFormState] = React.useState('send_code');
+  const [submitting, setSubmitting] = React.useState(false);
 
+  // Step 1: ask Cognito to email a reset code to this account.
   const onsubmit_send_code = async (event) => {
     event.preventDefault();
-    console.log('onsubmit_send_code')
-    return false
+    if (submitting) return;
+    setSubmitting(true);
+    setErrors('');
+    try {
+      await resetPassword({ username });
+      setFormState('confirm_code');
+    } catch (error) {
+      console.log('resetPassword error:', error);
+      setErrors(error.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  // Step 2: send back the code plus the new password.
   const onsubmit_confirm_code = async (event) => {
     event.preventDefault();
-    console.log('onsubmit_confirm_code')
-    return false
+    if (submitting) return;
+    // Check the passwords match BEFORE talking to Cognito — no point
+    // spending the code (or a rate-limited email) on a typo.
+    if (password !== passwordAgain) {
+      setErrors('Passwords do not match');
+      return;
+    }
+    setSubmitting(true);
+    setErrors('');
+    try {
+      await confirmResetPassword({
+        username: username,
+        confirmationCode: code,
+        newPassword: password
+      });
+      setFormState('success');
+    } catch (error) {
+      console.log('confirmResetPassword error:', error);
+      setErrors(error.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const username_onchange = (event) => {
@@ -49,7 +85,7 @@ export default function RecoverPage() {
       <h2>Recover your Password</h2>
       <div className='fields'>
         <div className='field text_field username'>
-          <label>Email</label>
+          <label>Email or username</label>
           <input
             type="text"
             value={username}
@@ -59,7 +95,9 @@ export default function RecoverPage() {
       </div>
       {el_errors}
       <div className='submit'>
-        <button type='submit'>Send Recovery Code</button>
+        <button type='submit' disabled={submitting}>
+          {submitting ? 'Sending…' : 'Send Recovery Code'}
+        </button>
       </div>
 
     </form>
@@ -98,9 +136,11 @@ export default function RecoverPage() {
           />
         </div>
       </div>
-      {errors}
+      {el_errors}
       <div className='submit'>
-        <button type='submit'>Reset Password</button>
+        <button type='submit' disabled={submitting}>
+          {submitting ? 'Resetting…' : 'Reset Password'}
+        </button>
       </div>
     </form>
     )
