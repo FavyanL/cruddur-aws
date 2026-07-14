@@ -11,7 +11,7 @@ numbers, and wants to understand *why* something is broken before seeing the fix
 small edits himself; larger changes should be written for him, with the interesting parts
 commented. Propose a plan before sweeping changes.
 
-**Last updated:** 2026-07-12
+**Last updated:** 2026-07-13
 
 ---
 
@@ -259,6 +259,18 @@ code has since been fixed — packaging notes, the `finally: if conn` `NameError
 idempotent INSERT. Do not re-attach it until the DB is on RDS and psycopg2 is packaged for the
 Lambda runtime, or sign-up breaks for everyone again.
 
+### Password recovery (works as of 2026-07-13)
+
+`RecoverPage.js` implements Cognito's two-step reset: `resetPassword({ username })` emails a
+code, `confirmResetPassword({ username, confirmationCode, newPassword })` completes it. Two
+details worth remembering:
+
+- **Email works here, unlike at sign-up confirmation.** Alias attributes only resolve for
+  *confirmed* accounts — and anyone recovering a password is confirmed by definition. So the
+  form accepts email or handle.
+- The `username` state deliberately survives from step 1 to step 2: `confirmResetPassword`
+  must address the same identifier the code was requested for.
+
 ### Cognito's built-in email is rate-limited
 
 ~50 messages/day across the whole pool, and it sends from an untrusted domain, so codes land in
@@ -283,19 +295,21 @@ default. Use the console, which does a read-modify-write for you.
 
 Roughly in priority order.
 
-1. **Forgot-password still doesn't work.** `RecoverPage.js` is untouched scaffolding. It needs
-   Cognito's `resetPassword()` / `confirmResetPassword()`, and it will hit the same
-   handle-vs-email question sign-up did: address the account by its **username**.
-2. **`handle` has no UNIQUE constraint in Postgres.** Cognito enforces username uniqueness, so
+1. **`handle` has no UNIQUE constraint in Postgres.** Cognito enforces username uniqueness, so
    two people can't take the same handle *via sign-up* — but nothing at the database level
    stops it. A `UNIQUE` constraint on `users.handle` would make the guarantee real rather than
-   incidental.
-3. **`App.js` has a second, competing idea of the current user.** It calls Amplify's
+   incidental. (Related: no FK constraint on `activities.reply_to_activity_uuid`, which once
+   allowed orphan replies pointing at mock activities.)
+2. **`App.js` has a second, competing idea of the current user.** It calls Amplify's
    `getCurrentUser()` directly to gate the `/` route, while every page below it uses
    `fetchCurrentUser()`. Two sources of truth. Should be unified.
-4. **Cognito's built-in email should be replaced with SES.** ~50/day, lands in spam.
+3. **Cognito's built-in email should be replaced with SES.** ~50/day, lands in spam.
 4. **The "More" button in the sidebar does nothing.** Either give it a purpose or remove it.
-5. **AWS deployment** hasn't started. The eventual target is ECS Fargate + RDS + S3/CloudFront.
+5. **The notifications page serves mock data** (`notifications_activities.py`), and replying
+   to a mock activity writes orphan rows. Park or implement.
+6. **AWS deployment** hasn't started. The eventual target is ECS Fargate + RDS + S3/CloudFront.
+
+*(Resolved 2026-07-13: forgot-password — see §5.)*
 
 ---
 
