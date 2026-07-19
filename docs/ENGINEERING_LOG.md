@@ -11,7 +11,7 @@ numbers, and wants to understand *why* something is broken before seeing the fix
 small edits himself; larger changes should be written for him, with the interesting parts
 commented. Propose a plan before sweeping changes.
 
-**Last updated:** 2026-07-13
+**Last updated:** 2026-07-18
 
 ---
 
@@ -32,7 +32,7 @@ completed in `d9fc32b` / `904b321` / `598d451`.)
 |---|---|---|
 | `backend-flask` | 4567 | Flask, Python 3.10. **Does not hot-reload — must be restarted.** |
 | `frontend-react-js` | 3000 | React 18, CRA. Hot-reloads on save. |
-| `db` | 5432 | Postgres 13. Database name: `cruddur`, user: `postgres`. |
+| `db` | 5432 | Postgres 13. **No longer the app's database** — kept as a psql client and for local-mode fallback. |
 | `dynamodb-local` | 8000 | Present, not yet used. |
 | `xray-daemon` | 2000 | AWS X-Ray tracing. Picks up new routes automatically. |
 
@@ -143,6 +143,7 @@ failed. Check it in DevTools → Network before touching any code.
 | **404** | Token was *valid*, but no `users` row matches its `sub`. | The DB, not the code. `SELECT handle, cognito_user_id FROM users;` — your row needs a real `cognito_user_id`, not `MOCK`. |
 | **500** | The route registered but the Python blew up. | `docker compose logs --tail=40 backend-flask` |
 | **404 from Flask itself** (HTML, not JSON) | The route never registered. | Did you restart the backend? |
+| **CORS error + `net::ERR_FAILED` on EVERY endpoint** | The backend isn't answering at all. The browser reports missing CORS headers because a dead server sends no headers — CORS is the symptom, not the disease. | `docker compose ps` and the backend logs. |
 
 A **401 from `curl` with no token is the correct answer** — it means the route is guarding
 itself. Don't mistake it for a failure.
@@ -181,6 +182,41 @@ are created automatically on first sign-in — see §5.
 A **404** from `/api/users/me` is no longer an error state: it's the normal condition of a
 brand-new account, and the frontend answers it by provisioning. If you rebuild the Cognito
 user pool, every `sub` changes, and existing rows will stop matching.
+
+---
+
+## 4b. RDS (as of 2026-07-18, the real database)
+
+The app's Postgres now lives in **RDS, us-east-1** (same region as Cognito — always check the
+region picker before creating anything; the console creates resources in whatever region it
+happens to be showing). Instance: free-tier micro, public access ON but the security group
+allows port 5432 **only from the home IP (`/32`)**. Public access is a temporary compromise
+until Fargate exists in the VPC; then it goes private.
+
+- Connection string lives in `.env` as `PROD_CONNECTION_URL`; docker-compose passes it via
+  `${PROD_CONNECTION_URL}`. The DB password ends in `#`, which must be written `%23` inside
+  the URL (a raw `#` ends the URL and silently swallows the hostname).
+- **Local ↔ prod switch** = which `CONNECTION_URL` line is commented in docker-compose.yml.
+- psql against RDS (the local db container is the client):
+  ```bash
+  docker compose exec db psql "$PROD_CONNECTION_URL"   # or paste the URL
+  ```
+- Schema/seed were loaded by piping the .sql files through the container:
+  `docker compose exec -T db psql "<url>" < backend-flask/db/schema.sql`
+
+### Diagnostics learned the hard way
+
+- Compose warning **`The "PROD_CONNECTION_URL" variable is not set. Defaulting to a blank
+  string`** at the top of any compose command = the `.env` line is missing/typo'd/unsaved.
+  With a blank URL, psycopg tries the local Unix socket and the logs fill with
+  `connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed`.
+- **`restart` is not enough after changing environment config.** `docker compose restart`
+  reuses the container with its old env baked in. `docker compose up -d` re-creates it —
+  look for the word `Recreated` in the output.
+- Connection test outcomes: version string = in; ~30s hang then timeout = security group;
+  instant "password authentication failed" = network fine, password wrong; "database X does
+  not exist" = connected, but the initial-database-name step was skipped (`CREATE DATABASE`
+  from the `/postgres` default DB fixes it).
 
 ---
 
