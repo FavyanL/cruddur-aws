@@ -11,7 +11,7 @@ numbers, and wants to understand *why* something is broken before seeing the fix
 small edits himself; larger changes should be written for him, with the interesting parts
 commented. Propose a plan before sweeping changes.
 
-**Last updated:** 2026-07-18
+**Last updated:** 2026-07-28
 
 ---
 
@@ -217,6 +217,44 @@ until Fargate exists in the VPC; then it goes private.
   instant "password authentication failed" = network fine, password wrong; "database X does
   not exist" = connected, but the initial-database-name step was skipped (`CREATE DATABASE`
   from the `/postgres` default DB fixes it).
+
+---
+
+## 4c. ECS Fargate — in progress (2026-07-28)
+
+Backend image lives in ECR (`backend-flask:latest`, built with `--platform linux/amd64`
+because an Apple Silicon Mac builds ARM images by default and Fargate here runs x86 —
+the artifact must match the machine that runs it, same lesson as the Lambda psycopg2).
+
+Built so far:
+
+- **Cluster `cruddur`** — the named space tasks run in; with Fargate it's mostly a label.
+  First creation failed with "unable to assume the service linked role": ECS's own IAM
+  role (`AWSServiceRoleForECS`) didn't exist yet. Retrying created it. Lesson: AWS
+  *services* need roles too, not just users.
+- **Task definition `backend-flask:1`** — the recipe: which image, 0.25 vCPU / 512 MB,
+  OS/arch Linux/X86_64 (must match the image build platform), port 4567, all env vars
+  (RDS URL with `%23`, Cognito IDs, Honeycomb key — the app refuses to boot without it),
+  CloudWatch logging to `/ecs/backend-flask`. Revisions are immutable — edits create `:2`.
+  Deliberately NOT included: AWS access keys (containers get credentials from IAM roles,
+  never from env vars) and the X-Ray daemon address (no daemon in the cloud yet).
+  The **task execution role** (auto-created) is *ECS's* permission to pull the ECR image
+  and write logs — distinct from the (empty) task role, which would be *the app's* AWS
+  permissions.
+- **Security groups** — the chain of trust, each arrow one rule:
+  - `cruddur-alb-sg`: HTTP 80 from home IP only (widen when the app goes public)
+  - `cruddur-srv-sg`: TCP 4567, source = `cruddur-alb-sg` — the source is a *security
+    group*, not an IP, because container IPs churn; "anyone wearing the ALB's badge"
+    survives every redeploy
+  - `cruddur-db-sg`: added 5432 from `cruddur-srv-sg` as a SECOND rule (AWS refuses to
+    convert an IP-based rule to an SG-based one in place — add, don't edit). The home-IP
+    rule stays for psql access. One rule per caller, like a guest list.
+
+**The ALB itself does NOT exist yet.** Next session: create target group (type IP,
+port 4567, health check `/api/health-check` — the route exists and returns
+`{"success": true}`; the ALB polls it and replaces containers that stop answering),
+create the ALB in `cruddur-alb-sg`, then the ECS *service* (the standing order: keep 1
+task running, register it with the target group).
 
 ---
 
