@@ -11,7 +11,7 @@ numbers, and wants to understand *why* something is broken before seeing the fix
 small edits himself; larger changes should be written for him, with the interesting parts
 commented. Propose a plan before sweeping changes.
 
-**Last updated:** 2026-07-28
+**Last updated:** 2026-08-04
 
 ---
 
@@ -250,11 +250,39 @@ Built so far:
     convert an IP-based rule to an SG-based one in place — add, don't edit). The home-IP
     rule stays for psql access. One rule per caller, like a guest list.
 
-**The ALB itself does NOT exist yet.** Next session: create target group (type IP,
-port 4567, health check `/api/health-check` — the route exists and returns
-`{"success": true}`; the ALB polls it and replaces containers that stop answering),
-create the ALB in `cruddur-alb-sg`, then the ECS *service* (the standing order: keep 1
-task running, register it with the target group).
+**2026-08-04 — ALB, target group and service created.**
+
+- **Target group `cruddur-backend-tg`** — type **IP addresses** (Fargate tasks aren't
+  EC2 instances; each task gets its own network interface), HTTP 4567, health check
+  `/api/health-check`. Left empty on creation — the ECS service registers task IPs
+  automatically; never register container IPs by hand.
+- **ALB `cruddur-alb`** — internet-facing, `cruddur-alb-sg`, listener HTTP 80 →
+  `cruddur-backend-tg`.
+- **Service `backend-flask`** — desired 1 task, `cruddur-srv-sg`, **public IP ON**
+  (without it the task can't reach ECR to pull the image in a public subnet — the
+  alternative is private subnets + NAT at ~$32/mo).
+
+### Bug found: AZ mismatch (the "Unused" target)
+
+First deployment showed the target as **Unused: "Target is in an Availability Zone
+that is not enabled for the load balancer."** Cause: the ALB was created with only two
+subnets, but the service was allowed to launch tasks in ALL default subnets — so a task
+landing in a third AZ was invisible to the ALB. Two resources, each fine alone,
+disagreeing about geography. Fix: ALB → Network mapping → enable every AZ.
+Rule of thumb: **the ALB's subnets must be a superset of the service's subnets.**
+
+Target-state vocabulary: `Draining` = polite retirement (finish requests, deregister);
+`Unused` = ALB can't/won't route to it (check AZ coverage); `initial` = health checks
+in progress; `unhealthy` = checks failing (go read `/ecs/backend-flask` logs).
+
+### Cost note — this tier BILLS while it exists (no free tier)
+
+ALB ≈ $0.60/day, one running Fargate task ≈ $0.30/day. Between sessions: scale the
+service to **Desired tasks: 0** (config survives, billing stops); the ALB either stays
+(cheap-ish) or gets deleted and rebuilt. RDS remains free-tier.
+
+**Next:** confirm target healthy → hit `http://<ALB-DNS>/api/health-check` from a
+browser — first public request to the backend. Then S3 + CloudFront for the frontend.
 
 ---
 
