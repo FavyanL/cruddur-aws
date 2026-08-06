@@ -11,7 +11,7 @@ numbers, and wants to understand *why* something is broken before seeing the fix
 small edits himself; larger changes should be written for him, with the interesting parts
 commented. Propose a plan before sweeping changes.
 
-**Last updated:** 2026-08-04
+**Last updated:** 2026-08-05 — **the app is fully deployed on AWS.**
 
 ---
 
@@ -283,6 +283,54 @@ service to **Desired tasks: 0** (config survives, billing stops); the ALB either
 
 **Next:** confirm target healthy → hit `http://<ALB-DNS>/api/health-check` from a
 browser — first public request to the backend. Then S3 + CloudFront for the frontend.
+
+---
+
+## 4d. S3 + CloudFront — deployed (2026-08-05)
+
+The frontend is static files in a **private** S3 bucket (`cruddur-frontend-favyanl`),
+served by CloudFront (Free plan). CloudFront got bucket access via an origin access
+control the wizard configured automatically; nobody reaches the bucket directly.
+
+### The one-distribution / two-origin pattern (why there's no CORS anymore)
+
+CloudFront serves HTTPS; the ALB only speaks HTTP; browsers block an HTTPS page from
+calling an HTTP API ("mixed content"). Instead of buying a domain + certificate for
+the ALB, CloudFront routes by path:
+
+- default behavior → S3 (the React files)
+- `/api/*` behavior → the ALB origin (HTTP-only is fine server-to-server),
+  **CachingDisabled** (never cache API responses — caches are shared, feeds are
+  personal), all HTTP methods enabled (the default GET-only blocks POSTs)
+
+The build sets `REACT_APP_BACKEND_URL=""` so API calls are *relative* — same origin
+as the page. One URL for everything; CORS no longer applies.
+
+### Details that will bite if forgotten
+
+- **Default root object** `index.html`, and **Error pages**: 403/404 → `/index.html`
+  with response code 200. React Router invents routes client-side; without the
+  fallback, refreshing `/messages` asks S3 for a file that doesn't exist.
+- `cruddur-alb-sg` inbound is now **0.0.0.0/0:80** — the ALB went public when the
+  site did. (Hardening wishlist: restrict to CloudFront's managed prefix list.)
+- The production build runs **inside the frontend container** (the Mac has no Node):
+  `docker compose exec frontend-react-js sh -c '<REACT_APP vars> npm run build'`
+  then `docker cp` the `build/` folder out. Build values are frozen in at build time.
+- `frontend-react-js/build/` is **gitignored** — generated artifacts don't get committed.
+
+### How to ship a frontend change (the redeploy recipe)
+
+1. Rebuild (command above, same env vars)
+2. `aws s3 sync ./frontend-react-js/build s3://cruddur-frontend-favyanl`
+3. **Invalidate the CloudFront cache** or users keep getting the old files from edge
+   caches: CloudFront → distribution → Invalidations → Create → path `/*`
+   (or: `aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"`)
+
+### What "deployed" means as of today
+
+Browser → CloudFront (HTTPS) → S3 for the app, ALB → Fargate → RDS for the API.
+Cognito for identity. The laptop is no longer in the serving path at all.
+Running cost ≈ $1/day (ALB + one Fargate task); RDS free tier; S3/CloudFront pennies.
 
 ---
 
