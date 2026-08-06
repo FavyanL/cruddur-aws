@@ -326,6 +326,31 @@ as the page. One URL for everything; CORS no longer applies.
    caches: CloudFront → distribution → Invalidations → Create → path `/*`
    (or: `aws cloudfront create-invalidation --distribution-id <ID> --paths "/*"`)
 
+### Bug: the SPA fallback ate the API's 404 (found by the first stranger, fixed 2026-08-05)
+
+First real user could sign up and verify but never appeared signed in. Diagnosis chain:
+the DB showed **no row for them** (provisioning never ran) → provisioning is triggered by
+`/api/users/me` returning **404** → CloudFront's custom error response ("404 → serve
+`/index.html` as 200") applies to the WHOLE distribution, `/api/*` included — so the
+frontend received the homepage HTML with a 200 instead of the 404, `res.json()` threw,
+and the provision path never fired. Confirmed by fetching a nonsense `/api/` path and
+getting the React shell back.
+
+**Fix: delete the 404 custom error response; keep only the 403 one.** Deep-link refreshes
+still work because S3-behind-OAC answers *403* (not 404) for missing files — the policy
+grants only GetObject, so S3 won't even confirm a file's absence. The 403 rule alone
+carries the SPA fallback.
+
+Lessons: custom error responses are distribution-wide, not per-behavior — never let an
+error-masking rule cover an API path whose status codes carry meaning. And existing users
+worked fine throughout (their flow is all 200s), which is why the bug only bit newcomers.
+
+Stranger-test UX findings, wishlist: after email confirmation, redirect to sign-in with
+a message (users assume verified = signed in); the reply popup has NO close button
+(`popup_heading` is empty — the only escape is refreshing); signed-out users can open
+the reply form and submit into a silent 401; timestamps render as negative minutes
+(UTC stored, local assumed — timezone handling needed).
+
 ### What "deployed" means as of today
 
 Browser → CloudFront (HTTPS) → S3 for the app, ALB → Fargate → RDS for the API.
