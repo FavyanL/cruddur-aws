@@ -346,8 +346,9 @@ error-masking rule cover an API path whose status codes carry meaning. And exist
 worked fine throughout (their flow is all 200s), which is why the bug only bit newcomers.
 
 Stranger-test UX findings, wishlist: after email confirmation, redirect to sign-in with
-a message (users assume verified = signed in); the reply popup has NO close button
-(`popup_heading` is empty — the only escape is refreshing); signed-out users can open
+a message (users assume verified = signed in); ~~the reply popup has NO close button~~
+*(fixed 2026-08-09 — first full frontend redeploy: build → sync --delete → invalidation)*;
+signed-out users can open
 the reply form and submit into a silent 401; timestamps render as negative minutes
 (UTC stored, local assumed — timezone handling needed).
 
