@@ -80,6 +80,7 @@ export default function ReplyForm(props) {
       <div className="popup_form_wrap">
         <div className="popup_form">
           <div className="popup_heading">
+            <button className="popup_close" onClick={() => props.setPopped(false)}>×</button>
           </div>
           <div className="popup_content">
             <div className="activity_wrap">
