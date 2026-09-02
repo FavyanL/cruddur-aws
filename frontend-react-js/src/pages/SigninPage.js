@@ -1,11 +1,13 @@
 import './SigninPage.css';
 import React, { useState } from "react";
 import { ReactComponent as Logo } from '../components/svg/logo.svg';
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signIn, signOut } from '@aws-amplify/auth';
+
 
 export default function SigninPage({ refreshUser }) { // Accept refreshUser function from App.js
   const navigate = useNavigate(); 
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState('');
@@ -58,6 +60,9 @@ export default function SigninPage({ refreshUser }) { // Accept refreshUser func
       </div>
       <div className='signin-wrapper'>
         <form className='signin_form' onSubmit={onsubmit}>
+          {location.state?.justConfirmed &&
+            <div className='confirmed-notice'>Email verified! Sign in below to get started.</div>
+          }       
           <h2>Sign into your Cruddur account</h2>
           <div className='fields'>
             <div className='field text_field username'>

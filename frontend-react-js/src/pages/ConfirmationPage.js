@@ -68,7 +68,7 @@ export default function ConfirmationPage() {
       await confirmSignUp({ username: username, confirmationCode: code });
       // Confirmed, but NOT signed in — Cognito hands out no tokens here. Send them to sign
       // in; their users row gets created on that first authenticated call to the backend.
-      navigate('/signin');
+      navigate('/signin', { state: { justConfirmed: true } });
     } catch (error) {
       console.error('Error confirming sign up:', error);
       if (error.name === 'CodeMismatchException') {

@@ -62,6 +62,7 @@ export default function UserFeedPage() {
         <ActivityFeed 
           title={title} 
           setReplyActivity={setReplyActivity} 
+          user={user}
           setPopped={setPoppedReply}           
           activities={activities} />
         <ReplyForm 

@@ -71,6 +71,7 @@ export default function HomeFeedPage() {
         <ActivityFeed 
           title="Home" 
           setReplyActivity={setReplyActivity} 
+          user={user}
           setPopped={setPoppedReply} 
           activities={activities} 
         />

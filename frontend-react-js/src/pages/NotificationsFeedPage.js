@@ -66,6 +66,7 @@ export default function NotificationFeedPage() {
         <ActivityFeed 
           title="Notifications" 
           setReplyActivity={setReplyActivity} 
+          user={user}
           setPopped={setPoppedReply} 
           activities={activities} 
         />
