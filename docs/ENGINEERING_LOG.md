@@ -11,7 +11,7 @@ numbers, and wants to understand *why* something is broken before seeing the fix
 small edits himself; larger changes should be written for him, with the interesting parts
 commented. Propose a plan before sweeping changes.
 
-**Last updated:** 2026-08-05 — **the app is fully deployed on AWS.**
+**Last updated:** 2026-09-01 — deployed on AWS; stranger-test UX fixes shipped.
 
 ---
 
@@ -345,12 +345,16 @@ Lessons: custom error responses are distribution-wide, not per-behavior — neve
 error-masking rule cover an API path whose status codes carry meaning. And existing users
 worked fine throughout (their flow is all 200s), which is why the bug only bit newcomers.
 
-Stranger-test UX findings, wishlist: after email confirmation, redirect to sign-in with
-a message (users assume verified = signed in); ~~the reply popup has NO close button~~
+Stranger-test UX findings, wishlist: ~~after email confirmation, redirect to sign-in with
+a message~~ *(fixed 2026-09-01 — ConfirmationPage passes `{ state: { justConfirmed: true } }`
+via navigate; SigninPage reads it with useLocation and shows a "verified, sign in" notice)*;
+~~the reply popup has NO close button~~
 *(fixed 2026-08-09 — first full frontend redeploy: build → sync --delete → invalidation)*;
-signed-out users can open
-the reply form and submit into a silent 401; timestamps render as negative minutes
-(UTC stored, local assumed — timezone handling needed).
+~~signed-out users can open the reply form and submit into a silent 401~~
+*(fixed 2026-09-01 — `user` is passed down pages → ActivityFeed → ActivityItem, and the
+reply button renders only when `props.user` exists)*;
+timestamps render as negative minutes
+(UTC stored, local assumed — timezone handling needed — still open).
 
 ### What "deployed" means as of today
 
